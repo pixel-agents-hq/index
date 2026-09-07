@@ -173,6 +173,12 @@ export interface SubmitLayoutParams {
   tags?: string;
 }
 
+export interface ShareAcceptedResponse {
+  eventId: string;
+  occurredAt: string;
+  deliveriesQueued: number;
+}
+
 export interface PatchLayoutBody {
   title?: string;
   description?: string;
@@ -211,6 +217,34 @@ export interface AdminUserView {
 export interface ListAdminUsersResponse {
   users: AdminUserView[];
   nextCursor: string | null;
+}
+
+export interface WebhookSubscriptionView {
+  id: string;
+  name: string;
+  endpointUrl: string;
+  /** The final four characters only; the usable secret is never returned again. */
+  secretHint: string;
+  active: boolean;
+  createdBy: { discordId: string; username: string };
+  createdAt: string;
+  updatedAt: string;
+  secretRotatedAt: string | null;
+  consecutiveFailures: number;
+  lastAttemptAt: string | null;
+  lastSuccessAt: string | null;
+  lastFailureAt: string | null;
+  lastFailure: string | null;
+}
+
+export interface ListWebhookSubscriptionsResponse {
+  subscriptions: WebhookSubscriptionView[];
+}
+
+export interface CreatedWebhookSubscriptionResponse {
+  subscription: WebhookSubscriptionView;
+  /** Displayed once after create/rotate and held only in page state. */
+  secret: string;
 }
 
 /** Matches schema.ts's `audit_action` pgEnum, services/api. */

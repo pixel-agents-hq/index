@@ -25,3 +25,24 @@ export function writeRateLimitConfig(config: ApiConfig): RouteShorthandOptions {
     },
   };
 }
+
+/**
+ * Share fan-out is an authenticated action, so its short bucket follows the
+ * account across networks and never groups a shared office/Wi-Fi by IP. The
+ * auth context hook runs before @fastify/rate-limit's route pre-handler.
+ */
+export function shareRateLimitConfig(config: ApiConfig): RouteShorthandOptions {
+  return {
+    config: {
+      rateLimit: {
+        max: config.shareRateLimit.max,
+        timeWindow: config.shareRateLimit.windowMs,
+        // Auth is resolved by the app's preHandler hook. The plugin defaults
+        // to onRequest, which is too early for an account-keyed bucket.
+        hook: 'preHandler',
+        groupId: 'layout-share',
+        keyGenerator: (request) => request.user?.id ?? `anonymous:${request.ip}`,
+      },
+    },
+  };
+}

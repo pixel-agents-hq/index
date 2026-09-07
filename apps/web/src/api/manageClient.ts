@@ -13,6 +13,7 @@ import type {
   ListOwnerLayoutsResponse,
   OwnerLayoutView,
   PatchLayoutBody,
+  ShareAcceptedResponse,
   SubmitLayoutParams,
 } from './types';
 
@@ -95,5 +96,16 @@ export function deleteLayout(slug: string, accessToken: string, reason?: string)
     accessToken,
     parseAs: 'none',
     ...(reason !== undefined ? { body: { reason } } : {}),
+  });
+}
+
+export function shareLayout(
+  source: { slug: string } | { layout: object },
+  accessToken: string,
+): Promise<ShareAcceptedResponse> {
+  return apiRequest('/api/v1/layouts/share', {
+    method: 'POST',
+    body: source,
+    accessToken,
   });
 }

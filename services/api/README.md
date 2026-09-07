@@ -30,6 +30,7 @@ src/layouts/cursor.ts    opaque keyset pagination cursors — encode/decode/vali
 src/layouts/serialize.ts DB row -> public JSON shape, one place, for list and detail alike
 src/layouts/schemas.ts   the JSON Schemas that validate requests AND generate the OpenAPI doc
 src/layouts/routes.ts    GET /layouts, /layouts/:slug{,/download,/preview.png,/thumbnail.png}
+src/layouts/share.ts     POST /layouts/share — authenticated snapshot + persistent fan-out
 src/renderer/client.ts   thin client for the renderer service, used by preview routes
 
 src/layouts/submit.ts    POST /layouts — the whole submission pipeline
@@ -42,7 +43,9 @@ src/moderation/audit.ts  recordModerationAction() — the one insert path into t
 src/moderation/routes.ts GET /moderation/layouts — the moderation console's browse endpoint
 
 schema/share-event-v1.schema.json  external layout.shared event contract
-src/webhooks/schema.ts             schema loader and checked TypeScript event shape for #91
+src/webhooks/schema.ts             schema loader and checked TypeScript event shape
+src/webhooks/routes.ts             moderator creation/rotation and Admin subscription health
+src/webhooks/delivery.ts           persistent queue worker, signed HTTP delivery and retries
 
 src/users/routes.ts      GET /admin/users — read-only interacted-user directory
 src/authors/routes.ts    GET /authors/:id — public author identity/count
@@ -79,6 +82,7 @@ is ever compiled in; see [`docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md#wha
 | `DISCORD_CLIENT_SECRET` | yes | — | Same |
 | `PUBLIC_API_ORIGIN` | yes | — | This API's own externally-reachable origin. `${this}/callback` **must exactly match** the redirect URI registered in the Discord Developer Portal — Discord rejects a mismatch, and mismatches fail late and confusingly |
 | `SESSION_SECRET` | yes | — | Signs access tokens. `openssl rand -base64 48`. ≥32 characters, checked at boot |
+| `WEBHOOK_SECRET_ENCRYPTION_KEY` | yes | — | API-only base64 32-byte AES-256-GCM key for subscriber signing secrets |
 | `DISCORD_ADMIN_IDS` | | — | Comma-separated Discord user IDs that receive Admin |
 | `DISCORD_GUILD_ID` | | — | Enables official-guild membership gating and role checks; omit for a fully functional unguilded instance |
 | `DISCORD_MODERATOR_ROLE_IDS` | with guild | — | Comma-separated guild role IDs that receive Moderator |
@@ -95,9 +99,11 @@ is ever compiled in; see [`docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md#wha
 | `LOG_LEVEL` | | `info` | Pino level |
 | `RATE_LIMIT_MAX` / `RATE_LIMIT_WINDOW_MS` | | `300` / `60000` | General bucket |
 | `RATE_LIMIT_WRITE_MAX` / `RATE_LIMIT_WRITE_WINDOW_MS` | | `20` / `60000` | Tighter bucket for submission, render-triggering paths, and the auth endpoints |
+| `RATE_LIMIT_SHARE_MAX` / `RATE_LIMIT_SHARE_WINDOW_MS` | | `1` / `300000` | Authenticated per-user Share bucket |
 | `PIXEL_AGENTS_DIR` | | auto-discovered | Where `vendor/pixel-agents` lives, for `GET /api/v1/meta` and submission validation |
 | `MAX_LAYOUT_BYTES` | | `2000000` | Submission size cap, refused before `JSON.parse` even runs — matches the renderer's own default so a layout accepted here is never subsequently rejected there |
 | `MAX_SUBMISSIONS_PER_USER_PER_DAY` | | `20` | Post-moderation means a flood is a real, cheap attack — a real 24h count, not a token bucket |
+| `MAX_SHARES_PER_USER_PER_DAY` | | `5` | Persisted rolling-24-hour outbound fan-out cap per user |
 
 `PUBLIC_WEB_ORIGIN` entries must be an **origin only** — `https://pixel-index.example`,
 never `https://pixel-index.example/` or `.../some/path`. `new URL(x).origin !== x` is

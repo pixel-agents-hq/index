@@ -9,6 +9,8 @@ cd "$(dirname "$0")"
 
 export SESSION_SECRET
 SESSION_SECRET=$(openssl rand -base64 48)
+export WEBHOOK_SECRET_ENCRYPTION_KEY
+WEBHOOK_SECRET_ENCRYPTION_KEY=$(openssl rand -base64 32)
 
 cleanup() {
   docker compose down --volumes --remove-orphans

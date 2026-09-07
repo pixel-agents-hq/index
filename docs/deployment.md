@@ -354,6 +354,7 @@ than one restart per missing value.
 | `DISCORD_CLIENT_ID` | **Yes** | `1234567890123456789` | Public, but it lives here because the API is what uses it. |
 | `DISCORD_CLIENT_SECRET` | **Yes** | *(from the Developer Portal)* | **Secret.** Never in GitHub, never in Vercel, never in a `VITE_` variable. |
 | `SESSION_SECRET` | **Yes** | 32+ chars, `openssl rand -base64 48` | **Secret.** Signs access tokens and the OAuth state cookie. Rejected below 32 characters. |
+| `WEBHOOK_SECRET_ENCRYPTION_KEY` | **Yes** | `openssl rand -base64 32` | **API-only secret.** Encrypts moderator-issued webhook signing secrets in Postgres. Keep it stable and backed up; changing it makes existing subscriptions require rotation. |
 | `DISCORD_ADMIN_IDS` | No | `999888777666555444` | Comma-separated Discord user IDs that receive Admin. Works with or without guild gating. |
 | `DISCORD_GUILD_ID` | No | `1478428628709802166` | Enables membership gating and direct Discord role checks. Leave blank for a fully functional unguilded self-hosted index. |
 | `DISCORD_MODERATOR_ROLE_IDS` | With a guild | `1528065925264445622` | Comma-separated Discord role IDs that receive Moderator. |
@@ -368,7 +369,7 @@ than one restart per missing value.
 
 Tuning knobs with working defaults you can usually ignore: `API_HOST`, `API_PORT`,
 `LOG_LEVEL`, `API_BODY_LIMIT_BYTES`, `MAX_LAYOUT_BYTES`, `MAX_IMPORT_BYTES`,
-`MAX_SUBMISSIONS_PER_USER_PER_DAY`, `RATE_LIMIT_*`, `ACCESS_TOKEN_TTL_MS`,
+`MAX_SUBMISSIONS_PER_USER_PER_DAY`, `MAX_SHARES_PER_USER_PER_DAY`, `RATE_LIMIT_*`, `ACCESS_TOKEN_TTL_MS`,
 `REFRESH_TOKEN_TTL_MS`, `LOGIN_CODE_TTL_MS`, `PIXEL_AGENTS_DIR`.
 `services/api/src/config.ts` is the authoritative list. `MAX_IMPORT_BYTES` (default 50MB)
 is the one exception to `API_BODY_LIMIT_BYTES` above (#63) — `POST
@@ -586,6 +587,7 @@ PUBLIC_API_ORIGIN=https://api.example.com
 DISCORD_CLIENT_ID=...                 # Discord Developer Portal → OAuth2
 DISCORD_CLIENT_SECRET=...
 SESSION_SECRET=$(openssl rand -base64 48)
+WEBHOOK_SECRET_ENCRYPTION_KEY=$(openssl rand -base64 32)
 DISCORD_ADMIN_IDS=...                 # comma-separated Discord user IDs
 # Optional official-community integration (omit all for unguilded self-hosting):
 DISCORD_GUILD_ID=...

@@ -58,6 +58,7 @@ services:
       DISCORD_CLIENT_ID: "${DISCORD_CLIENT_ID:?DISCORD_CLIENT_ID is required, see .env.example}"
       DISCORD_CLIENT_SECRET: "${DISCORD_CLIENT_SECRET:?DISCORD_CLIENT_SECRET is required, see .env.example}"
       SESSION_SECRET: "${SESSION_SECRET:?SESSION_SECRET is required, generate one with openssl rand -base64 48}"
+      WEBHOOK_SECRET_ENCRYPTION_KEY: "${WEBHOOK_SECRET_ENCRYPTION_KEY:?WEBHOOK_SECRET_ENCRYPTION_KEY is required, generate one with openssl rand -base64 32}"
       BACKUP_API_KEY: "${BACKUP_API_KEY:-}"
       DISCORD_ADMIN_IDS: "${DISCORD_ADMIN_IDS:-}"
       DISCORD_GUILD_ID: "${DISCORD_GUILD_ID:-}"

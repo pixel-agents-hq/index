@@ -5,18 +5,17 @@ a layout. The first consumer is expected to be Pico, the Discord bot: Pixel Inde
 the event, Pico obtains a preview image, and Pico posts the image to Discord together
 with the Discord user id of the person who shared it.
 
-The event contract is defined now. The share endpoint, subscription pages and outbound
-delivery are implemented separately by [issue #91](https://github.com/pixel-agents-hq/index/issues/91).
-Until that issue lands, this document describes the interface those pieces must build;
-it does not mean a deployed API already accepts subscriptions or emits events.
+The share endpoint, subscription management and outbound delivery are implemented by
+[issue #91](https://github.com/pixel-agents-hq/index/issues/91). This document is the
+integrator contract for those running pieces, not a proposed future interface.
 
 ## From Share to a subscriber
 
 ```mermaid
 flowchart LR
     user["Authenticated user"] -->|"Share layout"| api["Pixel Index API"]
-    api -->|"Create layout.shared event"| delivery["Event delivery"]
-    delivery -. "HTTP delivery" .-> pico["Pico or another subscriber"]
+    api -->|"Persist event + delivery jobs"| delivery["Postgres delivery queue"]
+    delivery -. "Signed HTTPS POST" .-> pico["Pico or another subscriber"]
     pico -->|"Fetch/render preview"| preview["Preview image"]
     pico -->|"Post image + sharer id"| discord["Discord"]
 ```
@@ -49,13 +48,42 @@ For a layout that has no public resource, publication is represented as:
 
 There is no `url: null` or empty-string placeholder.
 
-## Trigger limits
+## Trigger endpoint and limits
 
-Share is an authenticated, per-user action. The delivery implementation in issue #91
-must enforce both limits from the parent design:
+An authenticated browser or API client calls `POST /api/v1/layouts/share` with exactly
+one of these bodies:
+
+```json
+{ "slug": "four-rooms" }
+```
+
+This form shares the server's snapshot of a currently public layout and records its
+public API URL. To share work that has not been published, send the complete layout:
+
+```json
+{
+  "layout": {
+    "version": 1,
+    "layoutRevision": 1,
+    "cols": 1,
+    "rows": 1,
+    "tiles": [0],
+    "furniture": []
+  }
+}
+```
+
+The API validates an inline layout with the same pinned Pixel Agents validator used for
+publishing. Its owner is the authenticated sharer. A successful request returns `202`
+with `{ eventId, occurredAt, deliveriesQueued }`; acceptance means the event and one job
+per active subscription are durable in Postgres, not that every receiver has already
+acknowledged it.
+
+Share is an authenticated, per-user action. The endpoint enforces both limits from the
+parent design:
 
 - At most one accepted share in a rolling five-minute window.
-- At most five accepted shares in a rolling 24-hour window.
+- At most five accepted shares in a rolling 24-hour window, persisted with the events.
 
 An attempt over either limit is rejected with the API's normal `429` error response and
 does not create an event to deliver later. These limits bound outbound fan-out and
@@ -65,21 +93,26 @@ event reaches a subscriber.
 
 ## Subscriptions and secrets
 
-A moderator or admin creates a subscription through the moderator-facing page, giving
-the service a name and its HTTPS receiver URL. Pixel Index records the creating
+A moderator or admin creates a subscription at `/moderation/webhooks`, giving the
+service a unique name and its HTTPS receiver URL. Pixel Index records the creating
 moderator's Discord-backed identity. The Admin view lists the subscriptions and who
-created each one, without revealing their secrets.
+created each one, without revealing their secrets. The underlying authenticated API is
+`POST /api/v1/moderation/webhook-subscriptions` with
+`{ "name": "Pico", "endpointUrl": "https://…" }`.
 
-Each subscription receives an independent, cryptographically random secret. The secret
-is shown once when the subscription is created and must then be stored in the receiving
-service's secret manager; later Pixel Index pages show only non-secret identifying
-information. A secret is associated with the creator's Discord user id, but is never
-derived from that public id. The payload contains the non-secret `subscriptionId`, not
-the secret or a secret prefix.
+Each subscription receives an independent, cryptographically random `whsec_…` secret.
+The create response and page show it **once**; it must then be stored in the receiving
+service's secret manager. Later responses show only its final four characters. Pixel
+Index stores the usable secret encrypted with AES-256-GCM under the API-only
+`WEBHOOK_SECRET_ENCRYPTION_KEY`. A secret is associated with the creator's Discord user
+id, but is never derived from that public id. The payload contains the non-secret
+`subscriptionId`, not the secret or a secret prefix.
 
-Secret creation, rotation and revocation are part of issue #91. An integrator should
-not deploy a receiver until that implementation fixes the exact lifecycle and delivery
-headers.
+The creator or an admin can rotate a secret; rotation also shows the replacement exactly
+once and invalidates the old secret immediately. An admin can deactivate/reactivate a
+subscription. Deactivation cancels queued retries and prevents new delivery jobs; it
+does not delete history. The Admin view also shows the last attempt/success/failure and
+the number of events whose retries were exhausted consecutively.
 
 ## Payload contract
 
@@ -144,30 +177,58 @@ and required values cannot drift unnoticed.
 
 ## Authenticating a delivery
 
-The event body identifies a subscription but does not prove who sent it. The target
-design for issue #91 is a versioned HMAC-SHA256 signature made with that subscription's
-secret over an attempt timestamp and the exact raw HTTP body. A receiver will need to:
+The event body identifies a subscription but does not prove who sent it. Every delivery
+uses a versioned HMAC-SHA256 signature made directly with that subscription's secret.
+These HTTP headers accompany `Content-Type: application/json`:
+
+| Header | Value |
+|---|---|
+| `X-Pixel-Index-Event-Id` | The body `eventId`, for routing/logging before parsing. |
+| `X-Pixel-Index-Timestamp` | Unix time in whole seconds for this delivery attempt. |
+| `X-Pixel-Index-Signature` | `v1=` plus the 64-character lowercase hex HMAC-SHA256 digest. |
+
+The signed bytes are the UTF-8 bytes of the decimal timestamp, one ASCII dot (`.`), then
+the **exact raw HTTP body**: `<timestamp>.<raw-body>`. JSON must not be parsed,
+reformatted or reserialized before verification. A receiver must:
 
 1. Read the request body as bytes before JSON parsing or reformatting it.
-2. Reject a delivery timestamp outside the permitted replay window.
-3. Recompute the HMAC and compare it with the supplied signature in constant time.
+2. Reject a delivery timestamp more than 300 seconds in the past or future.
+3. Compute `HMAC-SHA256(subscription_secret, signed_bytes)`, hex-encode it in lowercase,
+   prefix it with `v1=`, and compare it with the supplied signature in constant time.
 4. Only after verification, parse the JSON and validate the supported schema version.
 
-Issue #91 must finalize the header names, signature encoding, signed byte format and
-replay window. Those details are deliberately not invented here: publishing plausible
-but unimplemented headers would give integrators a false contract. This document must
-be updated in the delivery PR if it chooses a different authentication mechanism.
+Header names are case-insensitive as usual in HTTP. The `v1=` prefix lets Pixel Index add
+a future signature version during a migration without silently changing this algorithm.
 
 ## Consuming deliveries safely
 
-Once delivery exists, a receiver should acknowledge a verified event quickly with a
-successful HTTP status and move slow work, such as rendering and posting to Discord,
-off the request path. Timeouts and non-success responses may be retried, so processing
-must be idempotent even after signature verification. The stable event and subscription
-ids exist for that purpose.
+Delivery is an asynchronous, persistent Postgres queue, not synchronous fan-out in the
+Share request. A worker attempts each HTTPS POST with a 10-second timeout and accepts
+only a `2xx` response. It never follows a redirect, because forwarding a signed body to
+an unregistered destination would be a credential-routing bug. Network errors, timeouts
+and every non-`2xx` response use this five-attempt schedule:
 
-The exact timeout, retry schedule, backoff and failure visibility belong to issue #91.
-No retry count or delivery guarantee is part of the version 1 body schema.
+1. Immediately after the share is accepted.
+2. One minute after the first failure.
+3. Five minutes after the second failure.
+4. Thirty minutes after the third failure.
+5. Two hours after the fourth failure.
+
+After the fifth failure, that delivery is permanently failed and visible in the Admin
+view. Pixel Index deliberately does **not** auto-disable the subscription: a temporary
+receiver outage must not silently opt a service out of all future events. New events
+continue to be queued until an admin explicitly deactivates it. Any later successful
+event resets the subscription's consecutive-failure count.
+
+A receiver should acknowledge a verified event quickly with a `2xx` and move slow work,
+such as rendering and posting to Discord, off the request path. Every failure can produce
+a duplicate attempt, and a worker can crash after the receiver accepts but before Pixel
+Index records success, so processing must be idempotent. The stable event and
+subscription ids exist for that purpose.
+
+The retry metadata is operational state and intentionally not part of the version 1 body
+schema; every retry carries the same `eventId`, `occurredAt` and data snapshot while its
+delivery timestamp and HMAC change.
 
 For the Pico flow:
 
@@ -180,6 +241,6 @@ For the Pico flow:
 4. Post the preview to Discord with `data.sharerDiscordId`. The receiver may also show
    the separate owner snapshot when the sharer is not the owner.
 
-Implementing Pico's receiving side is outside this repository. After issue #91 fixes
-the wire-level signature and retry behavior, its required parent-issue comment should
-point the Pico implementer to this schema and document the finalized headers.
+Implementing Pico's receiving side is outside this repository. The parent issue's
+implementation note points Pico's implementer to this schema and the finalized headers
+above.

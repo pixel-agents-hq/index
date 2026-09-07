@@ -22,8 +22,11 @@ describe('migrations', () => {
       'layouts',
       'moderation_actions',
       'reports',
+      'share_events',
       'tags',
       'users',
+      'webhook_deliveries',
+      'webhook_subscriptions',
     ]);
   });
 

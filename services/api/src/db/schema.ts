@@ -129,6 +129,15 @@ export const auditAction = pgEnum('audit_action', [
   'report.dismiss',
 ]);
 
+/** Persistent outbound work: a delivery survives API restarts until it succeeds or exhausts retries. */
+export const webhookDeliveryStatus = pgEnum('webhook_delivery_status', [
+  'pending',
+  'retrying',
+  'succeeded',
+  'failed',
+  'cancelled',
+]);
+
 // ── Tables ────────────────────────────────────────────────────────────────
 
 export const users = pgTable(
@@ -513,6 +522,100 @@ export const authLoginCodes = pgTable(
   ],
 );
 
+/**
+ * A moderator-created receiver for versioned Pixel Index webhook events.
+ *
+ * The usable secret is encrypted with the deployment's API-only webhook key.
+ * `secretHint` is the only part ever returned after creation/rotation. Creator
+ * identity is snapshotted as Discord-backed data so the Admin view remains
+ * useful even if the cached user profile later changes.
+ */
+export const webhookSubscriptions = pgTable(
+  'webhook_subscriptions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    name: text('name').notNull(),
+    endpointUrl: text('endpoint_url').notNull(),
+    encryptedSecret: text('encrypted_secret').notNull(),
+    secretHint: text('secret_hint').notNull(),
+    createdByUserId: uuid('created_by_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    createdByDiscordId: text('created_by_discord_id').notNull(),
+    createdByUsername: text('created_by_username').notNull(),
+    active: boolean('active').notNull().default(true),
+    consecutiveFailures: integer('consecutive_failures').notNull().default(0),
+    lastAttemptAt: timestamp('last_attempt_at', { withTimezone: true }),
+    lastSuccessAt: timestamp('last_success_at', { withTimezone: true }),
+    lastFailureAt: timestamp('last_failure_at', { withTimezone: true }),
+    lastFailure: text('last_failure'),
+    secretRotatedAt: timestamp('secret_rotated_at', { withTimezone: true }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    uniqueIndex('webhook_subscriptions_name_key').on(table.name),
+    index('webhook_subscriptions_creator_idx').on(table.createdByUserId, table.createdAt.desc()),
+    index('webhook_subscriptions_active_idx')
+      .on(table.createdAt)
+      .where(sql`active = true`),
+    check('webhook_subscriptions_name_not_blank', sql`length(btrim(${table.name})) > 0`),
+    check('webhook_subscriptions_secret_hint_length', sql`length(${table.secretHint}) = 4`),
+    check('webhook_subscriptions_failures_nonnegative', sql`${table.consecutiveFailures} >= 0`),
+  ],
+);
+
+/** One accepted Share action. `data` is the immutable event-time snapshot. */
+export const shareEvents = pgTable(
+  'share_events',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    sharerUserId: uuid('sharer_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    data: jsonb('data').notNull(),
+    occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index('share_events_sharer_occurred_idx').on(table.sharerUserId, table.occurredAt.desc())],
+);
+
+/**
+ * One event/subscription pair in the persistent delivery queue. A short lease
+ * prevents two API replicas from posting the same attempt concurrently; event
+ * and subscription ids still make receiver-side deduplication authoritative.
+ */
+export const webhookDeliveries = pgTable(
+  'webhook_deliveries',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    eventId: uuid('event_id')
+      .notNull()
+      .references(() => shareEvents.id, { onDelete: 'cascade' }),
+    subscriptionId: uuid('subscription_id')
+      .notNull()
+      .references(() => webhookSubscriptions.id, { onDelete: 'restrict' }),
+    status: webhookDeliveryStatus('status').notNull().default('pending'),
+    attemptCount: integer('attempt_count').notNull().default(0),
+    nextAttemptAt: timestamp('next_attempt_at', { withTimezone: true }).notNull().defaultNow(),
+    lastAttemptAt: timestamp('last_attempt_at', { withTimezone: true }),
+    deliveredAt: timestamp('delivered_at', { withTimezone: true }),
+    lastStatusCode: integer('last_status_code'),
+    lastError: text('last_error'),
+    lockedUntil: timestamp('locked_until', { withTimezone: true }),
+    lockToken: uuid('lock_token'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    uniqueIndex('webhook_deliveries_event_subscription_key').on(table.eventId, table.subscriptionId),
+    index('webhook_deliveries_due_idx')
+      .on(table.nextAttemptAt)
+      .where(sql`status IN ('pending', 'retrying')`),
+    index('webhook_deliveries_subscription_idx').on(table.subscriptionId, table.createdAt.desc()),
+    check('webhook_deliveries_attempts_nonnegative', sql`${table.attemptCount} >= 0`),
+  ],
+);
+
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Layout = typeof layouts.$inferSelect;
@@ -528,3 +631,9 @@ export type DiscordOauthGrant = typeof discordOauthGrants.$inferSelect;
 export type NewDiscordOauthGrant = typeof discordOauthGrants.$inferInsert;
 export type AuthLoginCode = typeof authLoginCodes.$inferSelect;
 export type NewAuthLoginCode = typeof authLoginCodes.$inferInsert;
+export type WebhookSubscription = typeof webhookSubscriptions.$inferSelect;
+export type NewWebhookSubscription = typeof webhookSubscriptions.$inferInsert;
+export type ShareEvent = typeof shareEvents.$inferSelect;
+export type NewShareEvent = typeof shareEvents.$inferInsert;
+export type WebhookDelivery = typeof webhookDeliveries.$inferSelect;
+export type NewWebhookDelivery = typeof webhookDeliveries.$inferInsert;

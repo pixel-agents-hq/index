@@ -74,6 +74,11 @@ function Nav() {
               Moderation
             </Link>
           )}
+          {user && (user.role === 'moderator' || user.role === 'admin') && (
+            <Link to="/moderation/webhooks" className="text-ink hover:text-accent">
+              Webhooks
+            </Link>
+          )}
           {user?.role === 'admin' && (
             <Link to="/admin" className="text-ink hover:text-accent">
               Admin

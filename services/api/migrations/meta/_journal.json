@@ -85,6 +85,13 @@
       "when": 1786740516748,
       "tag": "0011_bulk_import_audit_action",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1786790185617,
+      "tag": "0012_silent_mantis",
+      "breakpoints": true
     }
   ]
 }

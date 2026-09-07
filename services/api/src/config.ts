@@ -108,6 +108,8 @@ export interface ApiConfig {
   commit?: string;
   /** Signs access tokens (HS256) and the transient OAuth state cookie. */
   sessionSecret: string;
+  /** Base64-encoded 32-byte AES-256-GCM key for subscriber signing secrets at rest. */
+  webhookSecretEncryptionKey: string;
   /** How long a minted access token is valid without a fresh DB lookup. */
   accessTokenTtlMs: number;
   /** How long an unused refresh token stays valid. */
@@ -130,10 +132,14 @@ export interface ApiConfig {
    * of submissions, not a token-bucket approximation.
    */
   maxSubmissionsPerUserPerDay: number;
+  /** Persistent rolling-24-hour cap; the short Share bucket below is independent. */
+  maxSharesPerUserPerDay: number;
 
   rateLimit: RateLimitBucket;
   /** Tighter bucket for #8's submission and #4's render-triggering paths. */
   writeRateLimit: RateLimitBucket;
+  /** Authenticated, per-user Share bucket (one accepted request per five minutes by default). */
+  shareRateLimit: RateLimitBucket;
   /**
    * Its own bucket for the bulk export (#26), because it is the one read
    * path whose cost per request scales with the size of the index rather than
@@ -500,6 +506,20 @@ function discordEncryptionKey(problems: string[]): string | undefined {
   return raw;
 }
 
+function webhookEncryptionKey(problems: string[]): string {
+  const raw = requireEnv('WEBHOOK_SECRET_ENCRYPTION_KEY', problems);
+  if (
+    raw !== '' &&
+    (!/^[A-Za-z0-9+/]+={0,2}$/.test(raw) || Buffer.from(raw, 'base64').length !== 32)
+  ) {
+    problems.push(
+      'WEBHOOK_SECRET_ENCRYPTION_KEY must be base64 encoding of exactly 32 bytes ' +
+        '(generate with: openssl rand -base64 32)',
+    );
+  }
+  return raw;
+}
+
 export function loadConfig(): ApiConfig {
   const problems: string[] = [];
   const discordGuildId = optionalEnv('DISCORD_GUILD_ID');
@@ -510,6 +530,7 @@ export function loadConfig(): ApiConfig {
   const upstreamDir = optionalEnv('PIXEL_AGENTS_DIR');
   const commit = optionalEnv('API_COMMIT');
   const backupKey = backupApiKey(problems);
+  const webhookSecretEncryptionKey = webhookEncryptionKey(problems);
 
   if (discordGuildId && !DISCORD_SNOWFLAKE_RE.test(discordGuildId)) {
     problems.push(`DISCORD_GUILD_ID must be a Discord snowflake, got ${JSON.stringify(discordGuildId)}`);
@@ -567,12 +588,14 @@ export function loadConfig(): ApiConfig {
     ...(commit ? { commit } : {}),
     publicApiOrigin: requireOrigin('PUBLIC_API_ORIGIN', problems),
     sessionSecret: requireSessionSecret(problems),
+    webhookSecretEncryptionKey,
     accessTokenTtlMs: intFromEnv('ACCESS_TOKEN_TTL_MS', 15 * 60_000, problems),
     refreshTokenTtlMs: intFromEnv('REFRESH_TOKEN_TTL_MS', 30 * 24 * 60 * 60_000, problems),
     loginCodeTtlMs: intFromEnv('LOGIN_CODE_TTL_MS', 60_000, problems),
 
     maxLayoutBytes: intFromEnv('MAX_LAYOUT_BYTES', 2_000_000, problems),
     maxSubmissionsPerUserPerDay: intFromEnv('MAX_SUBMISSIONS_PER_USER_PER_DAY', 20, problems),
+    maxSharesPerUserPerDay: intFromEnv('MAX_SHARES_PER_USER_PER_DAY', 5, problems),
 
     rateLimit: {
       max: intFromEnv('RATE_LIMIT_MAX', 300, problems),
@@ -581,6 +604,10 @@ export function loadConfig(): ApiConfig {
     writeRateLimit: {
       max: intFromEnv('RATE_LIMIT_WRITE_MAX', 20, problems),
       windowMs: intFromEnv('RATE_LIMIT_WRITE_WINDOW_MS', 60_000, problems),
+    },
+    shareRateLimit: {
+      max: intFromEnv('RATE_LIMIT_SHARE_MAX', 1, problems),
+      windowMs: intFromEnv('RATE_LIMIT_SHARE_WINDOW_MS', 5 * 60_000, problems),
     },
     exportRateLimit: {
       max: intFromEnv('RATE_LIMIT_EXPORT_MAX', 6, problems),

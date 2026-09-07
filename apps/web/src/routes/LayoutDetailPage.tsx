@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
-import { getLayout, getLayoutJson, getMeta } from '../api/client';
+import { ApiError, getLayout, getLayoutJson, getMeta } from '../api/client';
+import { shareLayout } from '../api/manageClient';
 import { previewImageProps, usePreviewSource } from '../api/previewSourceState';
 import { useApi } from '../api/useApi';
 import { useAuth } from '../auth/authState';
@@ -29,7 +31,10 @@ export function LayoutDetailPage() {
   // Read before the early returns below — hooks cannot be called conditionally,
   // and resolving the URL needs `layout.files`, which only exists after them.
   const previewSource = usePreviewSource();
-  const { user } = useAuth();
+  const { accessToken, user } = useAuth();
+  const [sharing, setSharing] = useState(false);
+  const [shareResult, setShareResult] = useState<string | null>(null);
+  const [shareError, setShareError] = useState<ApiError | null>(null);
 
   if (layoutState.status === 'loading') {
     return <p className="text-muted">Loading…</p>;
@@ -49,6 +54,25 @@ export function LayoutDetailPage() {
         ? { status: 'error', message: layoutJsonState.error.message }
         : { status: 'loading' };
 
+  async function share() {
+    if (!accessToken) return;
+    setSharing(true);
+    setShareResult(null);
+    setShareError(null);
+    try {
+      const accepted = await shareLayout({ slug: layout.slug }, accessToken);
+      setShareResult(
+        accepted.deliveriesQueued === 1
+          ? 'Shared with 1 subscribed service.'
+          : `Shared with ${accepted.deliveriesQueued} subscribed services.`,
+      );
+    } catch (caught) {
+      setShareError(caught instanceof ApiError ? caught : new ApiError(0, 'Something unexpected went wrong.'));
+    } finally {
+      setSharing(false);
+    }
+  }
+
   return (
     <article>
       <h1 className="font-display text-2xl text-ink">{layout.title}</h1>
@@ -63,9 +87,9 @@ export function LayoutDetailPage() {
         they always did, read-only. Saving over this layout stays owner-only,
         which is the API's rule (manage.ts) rather than this page's.
       */}
-      {user?.submission.allowed && (
+      {user && (
         <p className="mt-3 flex flex-wrap gap-3 text-sm">
-          {user.discordId !== null && user.discordId === layout.author.discordId && (
+          {user.submission.allowed && user.discordId !== null && user.discordId === layout.author.discordId && (
             <Link
               to={`/layouts/${layout.slug}/edit`}
               className="border-2 border-accent px-3 py-1.5 text-accent"
@@ -73,14 +97,26 @@ export function LayoutDetailPage() {
               Edit layout
             </Link>
           )}
-          <Link
-            to={`/editor?from=${encodeURIComponent(layout.slug)}`}
-            className="border-2 border-border px-3 py-1.5 text-ink hover:border-accent"
+          {user.submission.allowed && (
+            <Link
+              to={`/editor?from=${encodeURIComponent(layout.slug)}`}
+              className="border-2 border-border px-3 py-1.5 text-ink hover:border-accent"
+            >
+              Use as a starting point
+            </Link>
+          )}
+          <button
+            type="button"
+            onClick={() => void share()}
+            disabled={sharing}
+            className="border-2 border-accent px-3 py-1.5 text-accent disabled:opacity-50"
           >
-            Use as a starting point
-          </Link>
+            {sharing ? 'Sharing…' : 'Share'}
+          </button>
         </p>
       )}
+      {shareResult && <p className="mt-2 text-sm text-accent" role="status">{shareResult}</p>}
+      {shareError && <div className="mt-2"><ErrorNotice error={shareError} /></div>}
 
       <div className="max-w-3xl">
         <LiveOfficePreview

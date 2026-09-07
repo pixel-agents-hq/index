@@ -10,6 +10,7 @@ const REQUIRED = {
   DISCORD_CLIENT_SECRET: 'client-secret',
   PUBLIC_API_ORIGIN: 'https://api.pixel-index.example',
   SESSION_SECRET: 'a'.repeat(32),
+  WEBHOOK_SECRET_ENCRYPTION_KEY: Buffer.alloc(32, 8).toString('base64'),
 } as const;
 
 const ENV_KEYS = [
@@ -23,6 +24,8 @@ const ENV_KEYS = [
   'RATE_LIMIT_WINDOW_MS',
   'RATE_LIMIT_WRITE_MAX',
   'RATE_LIMIT_WRITE_WINDOW_MS',
+  'RATE_LIMIT_SHARE_MAX',
+  'RATE_LIMIT_SHARE_WINDOW_MS',
   'RATE_LIMIT_EXPORT_MAX',
   'RATE_LIMIT_EXPORT_WINDOW_MS',
   'INITIAL_ADMIN_DISCORD_ID',
@@ -39,6 +42,7 @@ const ENV_KEYS = [
   'API_COMMIT',
   'MAX_LAYOUT_BYTES',
   'MAX_SUBMISSIONS_PER_USER_PER_DAY',
+  'MAX_SHARES_PER_USER_PER_DAY',
   'MAX_IMPORT_BYTES',
   'BACKUP_API_KEY',
   'PUBLIC_WEB_ORIGIN_PATTERNS',
@@ -268,6 +272,18 @@ describe('loadConfig — SESSION_SECRET', () => {
   });
 });
 
+describe('loadConfig — WEBHOOK_SECRET_ENCRYPTION_KEY', () => {
+  it('accepts exactly 32 decoded bytes', () => {
+    setRequired();
+    expect(Buffer.from(loadConfig().webhookSecretEncryptionKey, 'base64')).toHaveLength(32);
+  });
+
+  it('rejects a malformed or short key', () => {
+    setRequired({ WEBHOOK_SECRET_ENCRYPTION_KEY: Buffer.alloc(16).toString('base64') });
+    expect(() => loadConfig()).toThrow(/WEBHOOK_SECRET_ENCRYPTION_KEY.*exactly 32 bytes/);
+  });
+});
+
 describe('loadConfig — BACKUP_API_KEY (#63)', () => {
   it('is unset by default — the scheduled backup workflow is opt-in', () => {
     setRequired();
@@ -364,13 +380,15 @@ describe('loadConfig — submission limits (#8)', () => {
     const config = loadConfig();
     expect(config.maxLayoutBytes).toBe(2_000_000);
     expect(config.maxSubmissionsPerUserPerDay).toBe(20);
+    expect(config.maxSharesPerUserPerDay).toBe(5);
   });
 
   it('reads overrides', () => {
-    setRequired({ MAX_LAYOUT_BYTES: '500000', MAX_SUBMISSIONS_PER_USER_PER_DAY: '5' });
+    setRequired({ MAX_LAYOUT_BYTES: '500000', MAX_SUBMISSIONS_PER_USER_PER_DAY: '5', MAX_SHARES_PER_USER_PER_DAY: '3' });
     const config = loadConfig();
     expect(config.maxLayoutBytes).toBe(500_000);
     expect(config.maxSubmissionsPerUserPerDay).toBe(5);
+    expect(config.maxSharesPerUserPerDay).toBe(3);
   });
 });
 
@@ -460,6 +478,8 @@ describe('loadConfig — overrides', () => {
       RATE_LIMIT_WINDOW_MS: '5000',
       RATE_LIMIT_WRITE_MAX: '2',
       RATE_LIMIT_WRITE_WINDOW_MS: '1000',
+      RATE_LIMIT_SHARE_MAX: '1',
+      RATE_LIMIT_SHARE_WINDOW_MS: '300000',
       RATE_LIMIT_EXPORT_MAX: '3',
       RATE_LIMIT_EXPORT_WINDOW_MS: '2000',
     });
@@ -469,6 +489,7 @@ describe('loadConfig — overrides', () => {
     expect(config.trustProxy).toBe(false);
     expect(config.rateLimit).toEqual({ max: 10, windowMs: 5000 });
     expect(config.writeRateLimit).toEqual({ max: 2, windowMs: 1000 });
+    expect(config.shareRateLimit).toEqual({ max: 1, windowMs: 300_000 });
     expect(config.exportRateLimit).toEqual({ max: 3, windowMs: 2000 });
   });
 

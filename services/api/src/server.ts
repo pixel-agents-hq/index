@@ -29,6 +29,7 @@ import { registerExportRoutes } from './layouts/export.js';
 import { registerManageRoutes } from './layouts/manage.js';
 import { registerLayoutRoutes } from './layouts/routes.js';
 import { sharedSchemas } from './layouts/schemas.js';
+import { registerShareRoutes } from './layouts/share.js';
 import { registerSubmitRoutes } from './layouts/submit.js';
 import { buildUpstreamValidator } from './layouts/upstreamValidator.js';
 import { registerMetaRoutes } from './meta.js';
@@ -36,6 +37,8 @@ import { registerAuditRoutes } from './moderation/auditRoutes.js';
 import { registerModerationRoutes } from './moderation/routes.js';
 import { API_VERSION, registerRootRoutes } from './root.js';
 import { registerUserAdminRoutes } from './users/routes.js';
+import { WebhookDeliveryWorker } from './webhooks/delivery.js';
+import { registerWebhookSubscriptionRoutes } from './webhooks/routes.js';
 
 export interface BuildServerDeps {
   config: ApiConfig;
@@ -47,6 +50,8 @@ export interface BuildServerDeps {
   pool: Queryable;
   /** The full Drizzle handle, for the auth routes and everything after. */
   db: AnyDatabase;
+  /** Injectable only so delivery tests never make a real network request. */
+  webhookFetch?: typeof fetch;
 }
 
 /**
@@ -67,7 +72,7 @@ export interface BuildServerDeps {
  */
 export const AJV_OPTIONS = { customOptions: { removeAdditional: false } };
 
-export async function buildServer({ config, pool, db }: BuildServerDeps): Promise<FastifyInstance> {
+export async function buildServer({ config, pool, db, webhookFetch }: BuildServerDeps): Promise<FastifyInstance> {
   const app = Fastify({
     bodyLimit: config.bodyLimitBytes,
     // The reverse proxy (Traefik, Cloudflare Tunnel) sets X-Forwarded-For.
@@ -153,12 +158,22 @@ export async function buildServer({ config, pool, db }: BuildServerDeps): Promis
   // the pinned upstream (submit's POST, manage's PUT .../layout) — see
   // upstreamValidator.ts for why this never throws.
   const upstream = buildUpstreamValidator(config, app.log, 'layout submission and editing');
+  const deliveryWorker = new WebhookDeliveryWorker(db, config, app.log, {
+    ...(webhookFetch ? { fetchImpl: webhookFetch } : {}),
+  });
+  app.addHook('onListen', () => {
+    deliveryWorker.start();
+  });
+  app.addHook('onClose', () => {
+    deliveryWorker.stop();
+  });
 
   registerRootRoutes(app, config);
   registerAuthRoutes(app, { config, db });
   registerAuthorRoutes(app, { db });
   registerMetaRoutes(app, config, db);
   registerLayoutRoutes(app, { config, db });
+  registerShareRoutes(app, { config, db, upstream, deliveryWorker });
   registerExportRoutes(app, { config, db });
   registerSubmitRoutes(app, { config, db, upstream });
   registerManageRoutes(app, { config, db, upstream });
@@ -167,6 +182,7 @@ export async function buildServer({ config, pool, db }: BuildServerDeps): Promis
   registerAuditRoutes(app, { config, db });
   registerBackupExportRoutes(app, { config, db });
   registerBackupImportRoutes(app, { config, db, upstream });
+  registerWebhookSubscriptionRoutes(app, { config, db });
 
   app.get('/health', { schema: { hide: true } }, () => ({ status: 'ok' }));
 

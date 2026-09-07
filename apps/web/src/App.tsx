@@ -13,6 +13,7 @@ import { ModerationPage } from './routes/ModerationPage';
 import { MyLayoutsPage } from './routes/MyLayoutsPage';
 import { NotFound } from './routes/NotFound';
 import { SubmitPage } from './routes/SubmitPage';
+import { WebhookSubscriptionsPage } from './routes/WebhookSubscriptionsPage';
 
 export function App() {
   return (
@@ -44,6 +45,14 @@ export function App() {
           element={
             <RequireAuth role="moderator">
               <ModerationPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="moderation/webhooks"
+          element={
+            <RequireAuth role="moderator">
+              <WebhookSubscriptionsPage />
             </RequireAuth>
           }
         />

@@ -52,6 +52,7 @@ services:
       # source. The script creates a matching DB user after migrations run.
       DISCORD_ADMIN_IDS: "999999999999999999"
       SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required — see e2e.sh}
+      WEBHOOK_SECRET_ENCRYPTION_KEY: ${WEBHOOK_SECRET_ENCRYPTION_KEY:?WEBHOOK_SECRET_ENCRYPTION_KEY is required — see e2e.sh}
       API_TRUST_PROXY: "false"
     ports:
       - "18080:3000"

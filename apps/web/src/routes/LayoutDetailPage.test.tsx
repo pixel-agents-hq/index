@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -6,7 +6,11 @@ import { AuthProvider } from '../auth/AuthProvider';
 import { requestUrl } from '../test/fetchStub';
 import { LayoutDetailPage } from './LayoutDetailPage';
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  localStorage.clear();
+  location.hash = '';
+});
 
 function detail(overrides: Record<string, unknown> = {}) {
   return {
@@ -116,5 +120,49 @@ describe('LayoutDetailPage', () => {
     );
     renderDetail();
     expect(await screen.findByText(/Could not reach the API/)).toBeInTheDocument();
+  });
+
+  it('lets an authenticated user trigger a share and reports queued subscribers', async () => {
+    location.hash = '#pixelIndexLoginCode=test-code';
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = requestUrl(input);
+        if (url.includes('/auth/token')) {
+          return Response.json({
+            accessToken: 'access-token',
+            refreshToken: 'refresh-token',
+            expiresInMs: 900_000,
+            user: {
+              id: 'user-1',
+              discordId: '1528094749993599038',
+              username: 'sharer',
+              displayName: 'Sharer',
+              avatarUrl: null,
+              role: 'user',
+              capabilityCheckedAt: null,
+              capabilityCacheTtlMs: 60000,
+              submission: { allowed: true, reason: null, inviteUrl: null },
+            },
+          });
+        }
+        if (url.endsWith('/api/v1/layouts/share') && init?.method === 'POST') {
+          return Response.json({
+            eventId: 'a75fc4d8-d0f7-4b26-9c6d-3329f9fc2834',
+            occurredAt: '2026-08-15T12:34:56.000Z',
+            deliveriesQueued: 2,
+          }, { status: 202 });
+        }
+        if (url.includes('/meta')) return Response.json(meta());
+        if (url.endsWith('/download')) return new Response(JSON.stringify(detail().layout));
+        return Response.json(detail());
+      }),
+    );
+    renderDetail();
+    fireEvent.click(await screen.findByRole('button', { name: 'Share' }));
+    expect(await screen.findByText('Shared with 2 subscribed services.')).toBeInTheDocument();
+    expect(vi.mocked(fetch).mock.calls.some(([input, init]) =>
+      requestUrl(input).endsWith('/api/v1/layouts/share') && init?.method === 'POST',
+    )).toBe(true);
   });
 });
