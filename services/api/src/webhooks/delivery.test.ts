@@ -45,7 +45,7 @@ afterAll(async () => {
   await harness.close();
 });
 
-async function queuedDelivery(active = true) {
+async function queuedDelivery(active = true, nextAttemptAt?: Date) {
   const user = await insertUser(harness.db);
   const [subscription] = await harness.db
     .insert(schema.webhookSubscriptions)
@@ -67,7 +67,11 @@ async function queuedDelivery(active = true) {
   if (!subscription || !event) throw new Error('fixture insert failed');
   const [delivery] = await harness.db
     .insert(schema.webhookDeliveries)
-    .values({ eventId: event.id, subscriptionId: subscription.id })
+    .values({
+      eventId: event.id,
+      subscriptionId: subscription.id,
+      ...(nextAttemptAt ? { nextAttemptAt } : {}),
+    })
     .returning();
   if (!delivery) throw new Error('fixture insert failed');
   return { subscription, event, delivery };
@@ -75,8 +79,8 @@ async function queuedDelivery(active = true) {
 
 describe('WebhookDeliveryWorker retries', () => {
   it('uses the documented backoff, stops after five attempts, surfaces failure, and does not auto-disable', async () => {
-    const fixture = await queuedDelivery();
     let now = new Date('2026-08-15T12:00:00.000Z');
+    const fixture = await queuedDelivery(true, now);
     const fetchImpl = vi.fn(async () => new Response('down', { status: 503 })) as typeof fetch;
     const worker = new WebhookDeliveryWorker(harness.db, config, logger.log, {
       fetchImpl,
