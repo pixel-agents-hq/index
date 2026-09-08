@@ -18,10 +18,12 @@
   "dependencies": {
     "@pixel-index/layout-core": "*",
     "fastify": "^5.8.5",
-    "playwright": "^1.58.2"
+    "playwright": "^1.58.2",
+    "pngjs": "^7.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
+    "@types/pngjs": "^6.0.5",
     "tsx": "^4.21.0",
     "typescript": "~5.9.3",
     "vitest": "^4.1.10"

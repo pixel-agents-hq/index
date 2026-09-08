@@ -27,7 +27,15 @@
  *   below for the reason requirement that distinguishes the two callers.
  */
 
-import { type Layout, layoutStats, sha256, SLUG_RE, validateSlug } from '@pixel-index/layout-core';
+import {
+  type Layout,
+  layoutStats,
+  mergeFurnitureCatalog,
+  sha256,
+  SLUG_RE,
+  validateLayout,
+  validateSlug,
+} from '@pixel-index/layout-core';
 import { eq } from 'drizzle-orm';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { FromSchema } from 'json-schema-to-ts';
@@ -44,6 +52,7 @@ import type { RequestSchemas } from '../http.js';
 import { recordModerationAction } from '../moderation/audit.js';
 import { writeRateLimitConfig } from '../rateLimit.js';
 import { requestPreview } from '../renderer/client.js';
+import { customAssetsForLayout } from '../renderer/customAssets.js';
 import {
   isUniqueViolation,
   MAX_DESCRIPTION_LENGTH,
@@ -446,7 +455,18 @@ export function registerManageRoutes(app: FastifyInstance, { config, db, upstrea
           throw ApiError.badRequest('Body is not valid JSON.');
         }
 
-        const validation = validator.validateLayout(parsedLayout);
+        // #101: extend the catalog with whatever custom furniture this
+        // layout references — see submit.ts's identical comment.
+        const customAssets = await customAssetsForLayout(db, parsedLayout);
+        const catalog =
+          customAssets.length > 0
+            ? mergeFurnitureCatalog(validator.catalog, customAssets.map((asset) => asset.catalogEntry))
+            : validator.catalog;
+        const validation = validateLayout(parsedLayout, {
+          catalog,
+          requiredRevision: validator.requiredRevision,
+          upstreamVersion: pin.version,
+        });
         if (!validation.valid) throw ApiError.validation(validation.issues);
 
         const hash = sha256(raw);
@@ -503,7 +523,7 @@ export function registerManageRoutes(app: FastifyInstance, { config, db, upstrea
           return row;
         });
 
-        const preview = await requestPreview(config.rendererUrl, parsedLayout);
+        const preview = await requestPreview(config.rendererUrl, parsedLayout, { customAssets });
         if (!preview.ok) {
           request.log.warn(
             { err: preview.error, slug: updated.slug },

@@ -13,8 +13,15 @@ const BASE = {
   scale: 1,
 };
 
-/** The sha256 `cacheKey(BASE)` produces at RENDER_FORMAT 2. Asserted below. */
-const GOLDEN_CACHE_HASH = '46aa0a40de57fd7f148727249ae8f984ecbe215a6a5745332f5c6b33d6f67608';
+/**
+ * The sha256 `cacheKey(BASE)` produces at RENDER_FORMAT 2. Asserted below.
+ * #101 added `customAssetsBytes` as a new key dimension (defaulting to the
+ * literal `'no-custom-assets'` when absent, same as `BASE` here) — this is a
+ * new axis of cache identity, like `scale` already was, not a change to how
+ * pixels are computed for a given identity, so RENDER_FORMAT itself did not
+ * bump; only this golden value did.
+ */
+const GOLDEN_CACHE_HASH = 'fbd577b358ed52f865babff38a1b9b25e6d6a95bc49ab5e0a3d2df39cc246b93';
 
 describe('cacheKey', () => {
   it('is stable for identical inputs', () => {
@@ -34,6 +41,10 @@ describe('cacheKey', () => {
 
   it('changes with the scale', () => {
     expect(cacheKey({ ...BASE, scale: 0.5 })).not.toBe(cacheKey(BASE));
+  });
+
+  it('changes with the custom-assets payload (#101)', () => {
+    expect(cacheKey({ ...BASE, customAssetsBytes: '[{"id":"MY_CHAIR"}]' })).not.toBe(cacheKey(BASE));
   });
 
   it('is a fixed value for fixed inputs', () => {

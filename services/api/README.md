@@ -31,6 +31,9 @@ src/layouts/serialize.ts DB row -> public JSON shape, one place, for list and de
 src/layouts/schemas.ts   the JSON Schemas that validate requests AND generate the OpenAPI doc
 src/layouts/routes.ts    GET /layouts, /layouts/:slug{,/download,/preview.png,/thumbnail.png}
 src/renderer/client.ts   thin client for the renderer service, used by preview routes
+src/renderer/customAssets.ts  which custom (uploaded) furniture a layout places, packaged
+                         for the renderer request (#101) — the renderer has no database
+                         of its own, so this is the one place that embeds the bytes it needs
 
 src/layouts/submit.ts    POST /layouts — the whole submission pipeline
 src/layouts/slug.ts      random, collision-safe submission slug — not title-derived

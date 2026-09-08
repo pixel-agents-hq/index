@@ -64,10 +64,26 @@ gets its own blast radius, concurrency limit and resource ceiling.
 ### `POST /render`
 
 ```jsonc
-{ "layout": { "version": 1, "cols": 21, /* … */ }, "scale": 1 }
+{
+  "layout": { "version": 1, "cols": 21, /* … */ },
+  "scale": 1,
+  // #101, optional: custom (uploaded) furniture the layout places. This
+  // service has no database of its own, so services/api embeds everything
+  // it needs directly here — the decoded catalog entry plus the sprite PNG
+  // itself, base64-encoded.
+  "customAssets": [
+    { "catalogEntry": { "id": "MY_CHAIR", "furniturePath": "custom-assets/MY_CHAIR.png", /* … */ }, "pngBase64": "..." }
+  ]
+}
 ```
 
-`scale` is `1` (default), `0.5` or `0.25`. Responds `image/png`, with:
+`scale` is `1` (default), `0.5` or `0.25`. `customAssets` extends validation's furniture
+catalog for this request only (`mergeFurnitureCatalog`, `@pixel-index/layout-core`) and
+is served to the browser mock via `page.route()` interception of both
+`furniture-catalog.json` and `assets/decoded/furniture.json` (this vendored checkout's
+own dev-server middleware fast path — see `render.ts`'s comment on why both, not just
+one, need intercepting) — the same technique already used to substitute the layout
+itself. Responds `image/png`, with:
 
 | Header | Meaning |
 |---|---|
@@ -103,7 +119,7 @@ Environment only. No hostname or path is compiled in.
 | `RENDERER_PORT` | `3000` | |
 | `RENDERER_CONCURRENCY` | `2` | Pages rendering at once. Never less than 1 |
 | `RENDERER_TIMEOUT_MS` | `60000` | Per render |
-| `RENDERER_MAX_LAYOUT_BYTES` | `2000000` | Refused at the socket |
+| `RENDERER_MAX_LAYOUT_BYTES` | `4000000` | Refused at the socket — the whole request body, including any embedded custom-asset PNGs (#101), not just the layout JSON |
 | `RENDERER_CACHE_DIR` | tmpdir | Content-addressed PNGs |
 | `RENDERER_CACHE_MAX_ENTRIES` | `2000` | `0` disables the cache |
 | `PIXEL_AGENTS_DIR` | auto-discovered | The pinned upstream |

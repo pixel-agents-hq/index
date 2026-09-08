@@ -10,16 +10,18 @@
 import {
   createValidator,
   type Layout,
+  mergeFurnitureCatalog,
   sha256,
   type UpstreamPin,
   upstreamPin,
+  validateLayout,
   type ValidationIssue,
 } from '@pixel-index/layout-core';
 import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
 
 import { cacheKey, PreviewCache } from './cache.js';
 import type { RendererConfig } from './config.js';
-import { type Renderer, RenderTimeoutError } from './render.js';
+import { type RenderCustomAsset, type Renderer, RenderTimeoutError } from './render.js';
 
 export interface BuildServerDeps {
   config: RendererConfig;
@@ -101,8 +103,13 @@ export async function buildServer({
   });
 
   app.post('/render', async (request, reply) => {
-    const body = request.body as { layout?: unknown; scale?: unknown } | undefined;
+    const body = request.body as
+      | { layout?: unknown; scale?: unknown; customAssets?: RenderCustomAsset[] }
+      | undefined;
     const layout = body?.layout ?? body;
+    // #101: custom furniture services/api embedded directly in the request —
+    // this service has no database of its own to look them up in.
+    const customAssets = body?.customAssets ?? [];
 
     const scale = body?.scale === undefined ? 1 : Number(body.scale);
     if (!ALLOWED_SCALES.has(scale)) {
@@ -113,8 +120,22 @@ export async function buildServer({
     }
 
     // Never hand unvalidated JSON to a browser. This also means a layout the
-    // index would reject can never occupy a render slot.
-    const { valid, issues } = validator.validateLayout(layout);
+    // index would reject can never occupy a render slot. `validator.catalog`
+    // extended with this request's custom assets, not re-read from disk —
+    // see `mergeFurnitureCatalog`'s own doc comment for why that's cheap
+    // enough to do unconditionally.
+    const catalog =
+      customAssets.length > 0
+        ? mergeFurnitureCatalog(validator.catalog, customAssets.map((asset) => asset.catalogEntry))
+        : validator.catalog;
+    const { valid, issues } =
+      customAssets.length > 0
+        ? validateLayout(layout, {
+            catalog,
+            requiredRevision: validator.requiredRevision,
+            upstreamVersion: pin.version,
+          })
+        : validator.validateLayout(layout);
     if (!valid) {
       return reply.code(422).send({ error: 'invalid_layout', issues });
     }
@@ -127,6 +148,7 @@ export async function buildServer({
       upstreamCommit: pin.commit,
       upstreamVersion: pin.version,
       scale,
+      ...(customAssets.length > 0 ? { customAssetsBytes: JSON.stringify(customAssets) } : {}),
     });
 
     const cached = await cache.get(key);
@@ -135,7 +157,7 @@ export async function buildServer({
     }
 
     try {
-      const png = await renderer.render(layout as Layout, { scale });
+      const png = await renderer.render(layout as Layout, { scale, customAssets });
       await cache.set(key, png);
       // Awaited inside the try on purpose: an un-awaited return would let a
       // send failure escape the catch below as an unhandled rejection.

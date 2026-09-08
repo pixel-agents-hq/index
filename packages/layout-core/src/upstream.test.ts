@@ -10,6 +10,7 @@ import {
   bundledLayoutRevision,
   furnitureCatalog,
   knownFurnitureIds,
+  mergeFurnitureCatalog,
   upstreamCommitFile,
   upstreamPin,
 } from './upstream.js';
@@ -55,6 +56,34 @@ describe('furnitureCatalog', () => {
 
   it('knownFurnitureIds agrees with the catalog', () => {
     expect(knownFurnitureIds()).toEqual(new Set(catalog.keys()));
+  });
+});
+
+describe('mergeFurnitureCatalog (#101)', () => {
+  const base = furnitureCatalog();
+
+  it('adds a new entry without mutating the base catalog', () => {
+    const merged = mergeFurnitureCatalog(base, [
+      { id: 'MY_CUSTOM_CHAIR', category: 'chairs', footprintW: 1, footprintH: 1 },
+    ]);
+    expect(merged.get('MY_CUSTOM_CHAIR')).toEqual({ category: 'chairs', footprintW: 1, footprintH: 1 });
+    expect(base.has('MY_CUSTOM_CHAIR')).toBe(false);
+    // Every built-in entry is still there — this extends, it doesn't replace.
+    expect(merged.size).toBe(base.size + 1);
+  });
+
+  it('lets a custom entry override a built-in id, last write wins', () => {
+    const [someId] = base.keys();
+    expect(someId).toBeDefined();
+    const merged = mergeFurnitureCatalog(base, [{ id: someId as string, category: 'overridden' }]);
+    expect(merged.get(someId as string)).toEqual({ category: 'overridden' });
+    expect(base.get(someId as string)?.category).not.toBe('overridden');
+  });
+
+  it('is a no-op for an empty extra list', () => {
+    const merged = mergeFurnitureCatalog(base, []);
+    expect(merged).toEqual(base);
+    expect(merged).not.toBe(base); // still a copy, not the same Map instance
   });
 });
 

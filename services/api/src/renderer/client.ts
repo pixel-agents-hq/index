@@ -6,6 +6,8 @@
  * be tested without a live renderer.
  */
 
+import type { RenderCustomAsset } from './customAssets.js';
+
 const RENDER_TIMEOUT_MS = 65_000; // the renderer's own default is 60s per render
 
 export interface PreviewResult {
@@ -20,10 +22,16 @@ export type PreviewFailure =
   | { kind: 'invalid_layout'; issues: unknown }
   | { kind: 'unavailable'; message: string };
 
+export interface RequestPreviewOptions {
+  /** Custom furniture the layout references (#101) — see `customAssets.ts`. Omit or empty for a layout with none. */
+  customAssets?: RenderCustomAsset[];
+  fetchImpl?: typeof fetch;
+}
+
 export async function requestPreview(
   rendererUrl: string,
   layout: unknown,
-  fetchImpl: typeof fetch = fetch,
+  { customAssets = [], fetchImpl = fetch }: RequestPreviewOptions = {},
 ): Promise<{ ok: true; result: PreviewResult } | { ok: false; error: PreviewFailure }> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), RENDER_TIMEOUT_MS);
@@ -34,7 +42,7 @@ export async function requestPreview(
     const response = await fetchImpl(new URL('/render', rendererUrl), {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ layout, scale: 1 }),
+      body: JSON.stringify({ layout, scale: 1, ...(customAssets.length > 0 ? { customAssets } : {}) }),
       signal: controller.signal,
     });
 
