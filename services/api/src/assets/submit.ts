@@ -35,10 +35,46 @@ import { ApiError } from '../errors.js';
 import { isUniqueViolation } from '../layouts/metadata.js';
 import { recordModerationAction } from '../moderation/audit.js';
 import { writeRateLimitConfig } from '../rateLimit.js';
-import { decodeAssetZip } from './decode.js';
+import { type DecodedFurnitureAsset, decodeFurnitureZip } from './decode.js';
+import type { DecodedCharacterAsset } from './decodeCharacter.js';
+import { decodeCharacterZip } from './decodeCharacter.js';
+import { type DecodedPetAsset, decodePetZip } from './decodePet.js';
 import { existingCustomAssetIds } from './query.js';
 import { submitCustomAssetQuerySchema } from './schemas.js';
 import { toDetail } from './serialize.js';
+import type { IdCollisionChecker } from './zip.js';
+
+type DecodedAsset = DecodedFurnitureAsset | DecodedCharacterAsset | DecodedPetAsset;
+
+/**
+ * Dispatches on `assetKind` to the one decode module that knows that kind's
+ * zip shape (#105) — everything below this call (insert, moderation audit,
+ * response) is kind-agnostic and stays that way, which is what makes the
+ * upload gating above it structurally uniform rather than three call sites
+ * that happen to agree today.
+ */
+async function decodeByKind(
+  assetKind: 'furniture' | 'character' | 'pet',
+  zipBuffer: Buffer,
+  name: string,
+  category: string | undefined,
+  isIdTaken: IdCollisionChecker,
+): Promise<DecodedAsset> {
+  switch (assetKind) {
+    case 'furniture': {
+      if (!category) throw ApiError.badRequest('category is required when assetKind is "furniture".');
+      return decodeFurnitureZip(zipBuffer, name, category, isIdTaken);
+    }
+    case 'character': {
+      if (category) throw ApiError.badRequest('category is only accepted when assetKind is "furniture".');
+      return decodeCharacterZip(zipBuffer, name, isIdTaken);
+    }
+    case 'pet': {
+      if (category) throw ApiError.badRequest('category is only accepted when assetKind is "furniture".');
+      return decodePetZip(zipBuffer, name, isIdTaken);
+    }
+  }
+}
 
 export interface AssetSubmitRoutesDeps {
   config: ApiConfig;
@@ -104,7 +140,13 @@ export function registerAssetSubmitRoutes(app: FastifyInstance, { config, db }: 
         const existing = await existingCustomAssetIds(db);
         const isIdTaken = (id: string) => builtIn.has(id) || existing.has(id);
 
-        const decoded = await decodeAssetZip(zipBuffer, request.query.name, request.query.category, isIdTaken);
+        const decoded = await decodeByKind(
+          request.query.assetKind,
+          zipBuffer,
+          request.query.name,
+          request.query.category,
+          isIdTaken,
+        );
 
         let created: schema.CustomAsset;
         try {
@@ -113,6 +155,7 @@ export function registerAssetSubmitRoutes(app: FastifyInstance, { config, db }: 
               await tx
                 .insert(schema.customAssets)
                 .values({
+                  assetKind: decoded.assetKind,
                   assetId: decoded.assetId,
                   requestedAssetId: decoded.requestedAssetId,
                   name: decoded.name,
@@ -130,7 +173,7 @@ export function registerAssetSubmitRoutes(app: FastifyInstance, { config, db }: 
               action: 'asset.create',
               targetType: 'asset',
               targetId: row.id,
-              after: { assetId: row.assetId, name: row.name, category: row.category },
+              after: { assetId: row.assetId, assetKind: row.assetKind, name: row.name, category: row.category },
             });
             return row;
           });

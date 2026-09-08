@@ -6,7 +6,7 @@ import { signAccessToken } from '../auth/tokens.js';
 import { createTestDatabase, type Harness } from '../db/test-support/harness.js';
 import type { EnvelopeBody } from '../errors.js';
 import { buildServer } from '../server.js';
-import { simpleAssetZip } from '../test-support/assetZip.js';
+import { characterZip, petZip, simpleAssetZip } from '../test-support/assetZip.js';
 import { testConfig } from '../test-support/config.js';
 import { insertUser } from '../test-support/layouts.js';
 import type { PublicCustomAssetDetail } from './serialize.js';
@@ -65,7 +65,7 @@ function submit(query: string, zip: Buffer, headers: Record<string, string> = {}
 describe('POST /api/v1/assets — authentication', () => {
   it('is impossible anonymously', async () => {
     const zip = await simpleAssetZip('ANON_CHAIR');
-    const response = await submit('name=Chair&category=chairs', zip);
+    const response = await submit('assetKind=furniture&name=Chair&category=chairs', zip);
     expect(response.statusCode).toBe(401);
   });
 });
@@ -74,7 +74,7 @@ describe('POST /api/v1/assets — the happy path', () => {
   it('publishes immediately, no moderator review', async () => {
     const { accessToken, user } = await tokenFor({ username: 'uploader' });
     const zip = await simpleAssetZip('HAPPY_CHAIR');
-    const response = await submit('name=Happy+Chair&category=chairs', zip, {
+    const response = await submit('assetKind=furniture&name=Happy+Chair&category=chairs', zip, {
       authorization: `Bearer ${accessToken}`,
     });
     expect(response.statusCode).toBe(201);
@@ -91,14 +91,14 @@ describe('POST /api/v1/assets — the happy path', () => {
 
   it('auto-suffixes a second upload that reuses the same id', async () => {
     const { accessToken: firstToken } = await tokenFor({ username: 'first-uploader' });
-    const first = await submit('name=Dup&category=chairs', await simpleAssetZip('DUP_CHAIR'), {
+    const first = await submit('assetKind=furniture&name=Dup&category=chairs', await simpleAssetZip('DUP_CHAIR'), {
       authorization: `Bearer ${firstToken}`,
     });
     expect(first.statusCode).toBe(201);
     expect(first.json<PublicCustomAssetDetail>().assetId).toBe('DUP_CHAIR');
 
     const { accessToken: secondToken } = await tokenFor({ username: 'second-uploader' });
-    const second = await submit('name=Dup+Two&category=chairs', await simpleAssetZip('DUP_CHAIR'), {
+    const second = await submit('assetKind=furniture&name=Dup+Two&category=chairs', await simpleAssetZip('DUP_CHAIR'), {
       authorization: `Bearer ${secondToken}`,
     });
     expect(second.statusCode).toBe(201);
@@ -112,7 +112,7 @@ describe('POST /api/v1/assets — the happy path', () => {
       const { accessToken } = await tokenFor({ username: 'oversized-uploader' });
       const response = await tinyApp.inject({
         method: 'POST',
-        url: '/api/v1/assets?name=Big&category=misc',
+        url: '/api/v1/assets?assetKind=furniture&name=Big&category=misc',
         payload: await simpleAssetZip('TOO_BIG'),
         headers: { 'content-type': 'application/zip', authorization: `Bearer ${accessToken}` },
       });
@@ -128,7 +128,7 @@ describe('POST /api/v1/assets — the happy path', () => {
     zip.file('manifest.json', JSON.stringify({ id: 'not valid id', type: 'asset' }));
     const buffer = await zip.generateAsync({ type: 'nodebuffer' });
 
-    const response = await submit('name=Bad&category=misc', buffer, {
+    const response = await submit('assetKind=furniture&name=Bad&category=misc', buffer, {
       authorization: `Bearer ${accessToken}`,
     });
     expect(response.statusCode).toBe(422);
@@ -136,11 +136,67 @@ describe('POST /api/v1/assets — the happy path', () => {
   });
 });
 
+describe('POST /api/v1/assets — assetKind (#105)', () => {
+  it('rejects an upload with no assetKind at all', async () => {
+    const { accessToken } = await tokenFor({ username: 'no-kind-uploader' });
+    const response = await submit('name=Chair&category=chairs', await simpleAssetZip('NO_KIND_CHAIR'), {
+      authorization: `Bearer ${accessToken}`,
+    });
+    expect(response.statusCode).toBe(400);
+  });
+
+  it('rejects category alongside assetKind=character', async () => {
+    const { accessToken } = await tokenFor({ username: 'confused-character-uploader' });
+    const response = await submit(
+      'assetKind=character&name=My+Character&category=misc',
+      await characterZip(),
+      { authorization: `Bearer ${accessToken}` },
+    );
+    expect(response.statusCode).toBe(400);
+  });
+
+  it('publishes a custom character with a null category', async () => {
+    const { accessToken } = await tokenFor({ username: 'character-uploader' });
+    const response = await submit('assetKind=character&name=My+Character', await characterZip(), {
+      authorization: `Bearer ${accessToken}`,
+    });
+    expect(response.statusCode).toBe(201);
+    const body = response.json<PublicCustomAssetDetail>();
+    expect(body.assetKind).toBe('character');
+    expect(body.category).toBeNull();
+    expect(body.assetId).toBe('MY_CHARACTER');
+  });
+
+  it('publishes a custom pet with a null category', async () => {
+    const { accessToken } = await tokenFor({ username: 'pet-uploader' });
+    const response = await submit(
+      'assetKind=pet&name=Bubbles',
+      await petZip('SUBMIT_TEST_PET', 'Bubbles'),
+      { authorization: `Bearer ${accessToken}` },
+    );
+    expect(response.statusCode).toBe(201);
+    const body = response.json<PublicCustomAssetDetail>();
+    expect(body.assetKind).toBe('pet');
+    expect(body.category).toBeNull();
+    expect(body.assetId).toBe('SUBMIT_TEST_PET');
+  });
+
+  it('rejects assetKind=furniture with no category', async () => {
+    const { accessToken } = await tokenFor({ username: 'no-category-uploader' });
+    const response = await submit(
+      'assetKind=furniture&name=Chair',
+      await simpleAssetZip('NO_CATEGORY_CHAIR'),
+      { authorization: `Bearer ${accessToken}` },
+    );
+    expect(response.statusCode).toBe(400);
+  });
+});
+
 describe('POST /api/v1/assets — X-Api-Key (bot-originated) uploads', () => {
   it('publishes and attributes to the given discordUserId, creating a stub user', async () => {
     const key = await mintApiKey('animator-bot');
     const response = await submit(
-      'name=Bot+Chair&category=chairs&discordUserId=222222222222222222',
+      'assetKind=furniture&name=Bot+Chair&category=chairs&discordUserId=222222222222222222',
       await simpleAssetZip('BOT_CHAIR'),
       { 'x-api-key': key },
     );
@@ -152,7 +208,7 @@ describe('POST /api/v1/assets — X-Api-Key (bot-originated) uploads', () => {
 
   it('rejects an unknown or malformed key', async () => {
     const response = await submit(
-      'name=Bot+Chair&category=chairs&discordUserId=333333333333333333',
+      'assetKind=furniture&name=Bot+Chair&category=chairs&discordUserId=333333333333333333',
       await simpleAssetZip('BAD_KEY_CHAIR'),
       { 'x-api-key': 'not-a-real-key' },
     );
@@ -161,7 +217,7 @@ describe('POST /api/v1/assets — X-Api-Key (bot-originated) uploads', () => {
 
   it('requires discordUserId alongside a valid API key', async () => {
     const key = await mintApiKey('animator-bot-no-discord-id');
-    const response = await submit('name=Bot+Chair&category=chairs', await simpleAssetZip('NO_DISCORD_ID'), {
+    const response = await submit('assetKind=furniture&name=Bot+Chair&category=chairs', await simpleAssetZip('NO_DISCORD_ID'), {
       'x-api-key': key,
     });
     expect(response.statusCode).toBe(400);
@@ -170,7 +226,7 @@ describe('POST /api/v1/assets — X-Api-Key (bot-originated) uploads', () => {
   it('rejects discordUserId on an ordinary web (Bearer) upload', async () => {
     const { accessToken } = await tokenFor({ username: 'confused-web-uploader' });
     const response = await submit(
-      'name=Chair&category=chairs&discordUserId=444444444444444444',
+      'assetKind=furniture&name=Chair&category=chairs&discordUserId=444444444444444444',
       await simpleAssetZip('MIXED_AUTH_CHAIR'),
       { authorization: `Bearer ${accessToken}` },
     );
@@ -180,12 +236,12 @@ describe('POST /api/v1/assets — X-Api-Key (bot-originated) uploads', () => {
   it('reuses the same stub user across two uploads by the same Discord id', async () => {
     const key = await mintApiKey('animator-bot-reuse');
     const first = await submit(
-      'name=First&category=chairs&discordUserId=555555555555555555',
+      'assetKind=furniture&name=First&category=chairs&discordUserId=555555555555555555',
       await simpleAssetZip('REUSE_ONE'),
       { 'x-api-key': key },
     );
     const second = await submit(
-      'name=Second&category=chairs&discordUserId=555555555555555555',
+      'assetKind=furniture&name=Second&category=chairs&discordUserId=555555555555555555',
       await simpleAssetZip('REUSE_TWO'),
       { 'x-api-key': key },
     );

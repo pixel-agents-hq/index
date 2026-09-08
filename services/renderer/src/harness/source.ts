@@ -24,7 +24,19 @@ export function loadSeedLayouts(dir: string): HarnessLayout[] {
     if (!entry.isDirectory()) continue;
     const file = path.join(root, entry.name, 'layout.json');
     if (!fs.existsSync(file)) continue;
-    layouts.push({ slug: entry.name, layout: JSON.parse(fs.readFileSync(file, 'utf-8')) });
+    // #105: a seed layout may carry a sibling `custom-assets.json` — the same
+    // `RenderCustomAsset[]` shape a real `/render` request embeds — to prove
+    // the custom furniture/character/pet interception paths survive a vendor
+    // bump, not just the bundled catalog.
+    const customAssetsFile = path.join(root, entry.name, 'custom-assets.json');
+    const customAssets = fs.existsSync(customAssetsFile)
+      ? (JSON.parse(fs.readFileSync(customAssetsFile, 'utf-8')) as HarnessLayout['customAssets'])
+      : undefined;
+    layouts.push({
+      slug: entry.name,
+      layout: JSON.parse(fs.readFileSync(file, 'utf-8')),
+      ...(customAssets ? { customAssets } : {}),
+    });
   }
 
   if (layouts.length === 0) {

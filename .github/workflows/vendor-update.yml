@@ -81,6 +81,14 @@ jobs:
       - name: Render seed/ against the baseline pin
         run: npx tsx "$HARNESS" run --source seed --out gate/seed-baseline.json
 
+      # #105: the undocumented custom furniture/character/pet paths get their
+      # own fixtures, kept out of seed/ itself — a layout referencing custom
+      # furniture would otherwise fail `seed/`'s other consumers (the seed
+      # DB loader, the plain layout validator in ci.yml), which know nothing
+      # about a request-embedded custom-asset catalog.
+      - name: Render seed-custom-assets/ against the baseline pin
+        run: npx tsx "$HARNESS" run --source seed --seed-dir seed-custom-assets --out gate/custom-assets-baseline.json
+
       - name: Render the live index against the baseline pin
         id: live-baseline
         if: vars.PRODUCTION_API_BASE_URL != ''
@@ -198,6 +206,12 @@ jobs:
           npx tsx "$HARNESS" run --source seed \
             --out gate/seed-candidate.json --png-dir gate/png/seed
 
+      - name: Render seed-custom-assets/ against the candidate pin
+        if: steps.candidate.outputs.moved == 'true'
+        run: |
+          npx tsx "$HARNESS" run --source seed --seed-dir seed-custom-assets \
+            --out gate/custom-assets-candidate.json --png-dir gate/png/custom-assets
+
       # Also gated on the baseline having succeeded: without a baseline there is
       # nothing to compare against, and rendering the whole live index anyway
       # would spend the run's longest step producing something unusable.
@@ -227,6 +241,25 @@ jobs:
             --baseline gate/seed-baseline.json --candidate gate/seed-candidate.json \
             --gate "Seed gate" --report gate/seed-report.md \
             --manifest gate/seed-manifest.json \
+            --upstream-url "$UPSTREAM_URL"
+          echo "code=$?" >> "$GITHUB_OUTPUT"
+        env:
+          UPSTREAM_URL: ${{ steps.urls.outputs.upstream }}
+
+      # #105: the same "nothing that rendered before fails now" guarantee,
+      # over the fixtures proving custom furniture/character/pet compatibility
+      # specifically — including the undocumented character/pet external-
+      # loading paths this issue depends on, which nothing else in this
+      # workflow exercises.
+      - name: Compare the two pins over seed-custom-assets/
+        id: custom-assets-gate
+        if: steps.candidate.outputs.moved == 'true'
+        run: |
+          set +e
+          npx tsx "$HARNESS" diff \
+            --baseline gate/custom-assets-baseline.json --candidate gate/custom-assets-candidate.json \
+            --gate "Custom assets gate" --report gate/custom-assets-report.md \
+            --manifest gate/custom-assets-manifest.json \
             --upstream-url "$UPSTREAM_URL"
           echo "code=$?" >> "$GITHUB_OUTPUT"
         env:
@@ -433,6 +466,7 @@ jobs:
             --candidate-commit "${{ steps.candidate.outputs.sha }}" \
             --repo-url "$UPSTREAM_URL" \
             --section gate/seed-report.md \
+            --section gate/custom-assets-report.md \
             --section gate/live-report.md \
             --section gate/live-preview-report.md \
             --section gate/preview-warning.md \
@@ -440,7 +474,7 @@ jobs:
             --preview-url "$PREVIEW_BASE_URL" \
             --out gate/pr-body.md
 
-          if [ "${{ steps.seed-gate.outputs.code }}" != "0" ] || [ "${{ steps.live-gate.outputs.code || '0' }}" != "0" ] || [ "${{ steps.live-preview.outputs.code }}" != "0" ]; then
+          if [ "${{ steps.seed-gate.outputs.code }}" != "0" ] || [ "${{ steps.custom-assets-gate.outputs.code || '0' }}" != "0" ] || [ "${{ steps.live-gate.outputs.code || '0' }}" != "0" ] || [ "${{ steps.live-preview.outputs.code }}" != "0" ]; then
             echo "labels=vendor-update,vendor-breaking" >> "$GITHUB_OUTPUT"
           else
             echo "labels=vendor-update" >> "$GITHUB_OUTPUT"
@@ -529,6 +563,7 @@ jobs:
         if: always() && steps.candidate.outputs.moved == 'true'
         run: |
           cat gate/seed-report.md >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+          cat gate/custom-assets-report.md >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
           cat gate/live-report.md >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
           cat gate/live-preview-report.md >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
           if [ -n "${{ steps.pr.outputs.pull-request-url }}" ]; then
@@ -545,14 +580,15 @@ jobs:
         if: steps.candidate.outputs.moved == 'true'
         run: |
           seed="${{ steps.seed-gate.outputs.code }}"
+          customAssets="${{ steps.custom-assets-gate.outputs.code || '0' }}"
           live="${{ steps.live-gate.outputs.code || '0' }}"
           preview="${{ steps.live-preview.outputs.code }}"
 
-          if [ "$seed" = "2" ]; then
+          if [ "$seed" = "2" ] || [ "$customAssets" = "2" ]; then
             echo "::error::The seed gate could not run — infrastructure, not a vendor verdict."
             exit 1
           fi
-          if [ "$seed" != "0" ] || [ "$live" = "1" ]; then
+          if [ "$seed" != "0" ] || [ "$customAssets" != "0" ] || [ "$live" = "1" ]; then
             echo "::error::This upstream bump breaks layouts. See the PR body for which ones."
             exit 1
           fi

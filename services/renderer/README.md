@@ -67,23 +67,40 @@ gets its own blast radius, concurrency limit and resource ceiling.
 {
   "layout": { "version": 1, "cols": 21, /* … */ },
   "scale": 1,
-  // #101, optional: custom (uploaded) furniture the layout places. This
-  // service has no database of its own, so services/api embeds everything
-  // it needs directly here — the decoded catalog entry plus the sprite PNG
-  // itself, base64-encoded.
+  // #101 furniture, #105 characters + pets, optional: custom (uploaded)
+  // assets. This service has no database of its own, so services/api embeds
+  // everything it needs directly here, one entry per kind (a discriminated
+  // union on "kind" — see `render.ts`'s `RenderCustomAsset`).
   "customAssets": [
-    { "catalogEntry": { "id": "MY_CHAIR", "furniturePath": "custom-assets/MY_CHAIR.png", /* … */ }, "pngBase64": "..." }
+    { "kind": "furniture", "catalogEntry": { "id": "MY_CHAIR", "furniturePath": "custom-assets/MY_CHAIR.png", /* … */ }, "pngBase64": "..." },
+    { "kind": "character", "sprites": { "down": [ /* 7 frames */ ], "up": [ /* … */ ], "right": [ /* … */ ] } },
+    { "kind": "pet", "name": "Bubbles", "frames": { "walkDown": [ /* 3 frames */ ], "idleDown": [ /* … */ ], "walkUp": [ /* … */ ], "idleUp": [ /* … */ ], "walkRight": [ /* … */ ] } }
   ]
 }
 ```
 
-`scale` is `1` (default), `0.5` or `0.25`. `customAssets` extends validation's furniture
-catalog for this request only (`mergeFurnitureCatalog`, `@pixel-index/layout-core`) and
-is served to the browser mock via `page.route()` interception of both
-`furniture-catalog.json` and `assets/decoded/furniture.json` (this vendored checkout's
-own dev-server middleware fast path — see `render.ts`'s comment on why both, not just
-one, need intercepting) — the same technique already used to substitute the layout
-itself. Responds `image/png`, with:
+`scale` is `1` (default), `0.5` or `0.25`. `customAssets`' furniture entries extend
+validation's furniture catalog for this request only (`mergeFurnitureCatalog`,
+`@pixel-index/layout-core`); characters and pets are never catalog-validated (a
+character is never referenced by a layout's JSON at all, and a pet's `petType` index is
+only bounds-checked client-side). Each kind reaches the browser differently:
+
+- **Furniture** — served via `page.route()` interception of both
+  `furniture-catalog.json` and `assets/decoded/furniture.json` (this vendored
+  checkout's own dev-server middleware fast path — see `render.ts`'s comment
+  on why both, not just one, need intercepting) — the same technique already
+  used to substitute the layout itself.
+- **Characters** — served via the analogous `page.route()` interception of
+  `assets/decoded/characters.json`, which the browser mock fetches exactly
+  like furniture's decoded JSON.
+- **Pets** — there is no fetch to intercept: traced through the vendored
+  checkout and confirmed it never requests or dispatches anything pet-related
+  in dev mode (pets are wholly an external-loading feature with no bundled
+  default). Synthesized instead by wrapping `window.dispatchEvent` to inject
+  a `petSpritesLoaded` postMessage ahead of every `layoutLoaded` dispatch —
+  the only way any pet, custom or otherwise, renders through this service.
+
+Responds `image/png`, with:
 
 | Header | Meaning |
 |---|---|

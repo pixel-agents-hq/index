@@ -99,6 +99,13 @@ export const reportStatus = pgEnum('report_status', ['open', 'resolved', 'dismis
 export const auditTargetType = pgEnum('audit_target_type', ['layout', 'user', 'report', 'asset', 'apikey']);
 
 /**
+ * #105: `custom_assets` is one polymorphic table for every uploadable kind,
+ * not a table per kind — furniture-only columns (today, just `category`)
+ * stay meaningful only for `assetKind: 'furniture'` rows.
+ */
+export const assetKindEnum = pgEnum('asset_kind', ['furniture', 'character', 'pet']);
+
+/**
  * Everything privileged that can happen, including owner actions — #9 requires
  * owner edits in the same log as moderator ones, so a layout's history is
  * reconstructable from this table alone.
@@ -346,10 +353,16 @@ export const layoutTags = pgTable(
 );
 
 /**
- * A custom furniture asset (#101) — manifest + PNG(s) uploaded through
- * `POST /api/v1/assets`, decoded into the same `CatalogEntry`/sprite-array
- * shape `buildDynamicCatalog()` (pixel-agents' webview) already knows how to
- * merge with the built-in catalog.
+ * A custom uploaded asset (#101 furniture, #105 characters + pets) —
+ * manifest + PNG(s) uploaded through `POST /api/v1/assets`, decoded into
+ * whatever shape that `assetKind` needs at render time.
+ *
+ * One polymorphic table for all three kinds, not one table per kind (#105
+ * decision): `category` is the only column that is furniture-specific —
+ * `manifest`/`sprites`/`rawZip` are kind-agnostic containers whose *contents*
+ * vary by kind (footprint/rotation-group data for furniture lives inside the
+ * `manifest` jsonb blob, not in separate columns, so there was nothing else
+ * to make conditional).
  *
  * No `visibility` column: #101 explicitly decided there is no moderator
  * pre-publish review and no hide/delete flow for a first version — add one
@@ -360,24 +373,37 @@ export const customAssets = pgTable(
   {
     id: uuid('id').primaryKey().defaultRandom(),
 
+    assetKind: assetKindEnum('asset_kind').notNull(),
+
     /**
-     * The public identifier — the manifest's own `id`, post-collision-suffix.
-     * This is what the browser/renderer catalog merge and every URL use.
+     * The public identifier — post-collision-suffix. This is what the
+     * browser/renderer catalog merge and every URL use. Furniture's id comes
+     * from its own manifest; pixel-index assigns one for characters and pets
+     * too (upstream has no id concept for either), because routes here are
+     * always id-addressed regardless of what upstream itself needs.
      */
     assetId: text('asset_id').notNull(),
     /** What the uploader actually submitted, before any suffix — kept for audit. */
     requestedAssetId: text('requested_asset_id').notNull(),
 
     name: text('name').notNull(),
-    category: text('category').notNull(),
+    /** Furniture only (one of the 7 upstream categories) — null for characters and pets. */
+    category: text('category'),
 
     /**
-     * The flattened, validated variants for this asset — one entry per
-     * rotation/state/animation member, `CatalogEntry`-shaped. Always at least
-     * one element.
+     * The flattened, validated variant(s) for this asset, kind-shaped:
+     * furniture is one entry per rotation/state/animation member
+     * (`CatalogEntry`-shaped); character and pet are always a single-element
+     * array. Always at least one element.
      */
     manifest: jsonb('manifest').notNull(),
-    /** `Record<variantAssetId, string[][]>` — decoded sprite data, one key per manifest variant. */
+    /**
+     * Decoded sprite data, keyed by the ids in `manifest`. Furniture values
+     * are a flat `string[][]` pixel grid; character values are
+     * `{down,up,right}` frame arrays; pet values are
+     * `{walkDown,idleDown,walkUp,idleUp,walkRight}` frame arrays — whatever
+     * shape that kind's decode module produces and the renderer expects back.
+     */
     sprites: jsonb('sprites').notNull(),
     /** The original upload, verbatim — provenance, and a re-decode source if the pipeline ever changes. */
     rawZip: bytea('raw_zip').notNull(),
@@ -394,9 +420,17 @@ export const customAssets = pgTable(
     // Mirrors the id character set the manifest schema (external-assets.md)
     // and pixel-art-mcp's own `asset_id` validation both require.
     check('custom_assets_asset_id_format', sql`${table.assetId} ~ '^[A-Z][A-Z0-9_]*$'`),
+    // Structural, not incidental (#105 decision #4): the DB itself refuses a
+    // furniture row with no category or a character/pet row with one, rather
+    // than relying on every write path to remember the rule.
+    check(
+      'custom_assets_category_by_kind',
+      sql`(${table.assetKind} = 'furniture' AND ${table.category} IS NOT NULL) OR (${table.assetKind} <> 'furniture' AND ${table.category} IS NULL)`,
+    ),
     index('custom_assets_author_idx').on(table.authorUserId),
     index('custom_assets_public_created_idx').on(table.createdAt.desc(), table.id.desc()),
     index('custom_assets_category_idx').on(table.category),
+    index('custom_assets_kind_idx').on(table.assetKind),
   ],
 );
 

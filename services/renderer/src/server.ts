@@ -107,9 +107,16 @@ export async function buildServer({
       | { layout?: unknown; scale?: unknown; customAssets?: RenderCustomAsset[] }
       | undefined;
     const layout = body?.layout ?? body;
-    // #101: custom furniture services/api embedded directly in the request —
-    // this service has no database of its own to look them up in.
+    // #101 furniture, #105 characters + pets: custom assets services/api
+    // embedded directly in the request — this service has no database of its
+    // own to look them up in.
     const customAssets = body?.customAssets ?? [];
+    // Only furniture affects layout validation — a layout's `furniture[].type`
+    // is checked against the catalog, but a character is never referenced by
+    // a layout at all and a pet's `petType` is never catalog-checked
+    // (`packages/layout-core` treats `pets` as opaque). Extending the catalog
+    // for a request with only characters/pets would be pointless work.
+    const customFurniture = customAssets.filter((asset) => asset.kind === 'furniture');
 
     const scale = body?.scale === undefined ? 1 : Number(body.scale);
     if (!ALLOWED_SCALES.has(scale)) {
@@ -121,15 +128,15 @@ export async function buildServer({
 
     // Never hand unvalidated JSON to a browser. This also means a layout the
     // index would reject can never occupy a render slot. `validator.catalog`
-    // extended with this request's custom assets, not re-read from disk —
+    // extended with this request's custom furniture, not re-read from disk —
     // see `mergeFurnitureCatalog`'s own doc comment for why that's cheap
     // enough to do unconditionally.
     const catalog =
-      customAssets.length > 0
-        ? mergeFurnitureCatalog(validator.catalog, customAssets.map((asset) => asset.catalogEntry))
+      customFurniture.length > 0
+        ? mergeFurnitureCatalog(validator.catalog, customFurniture.map((asset) => asset.catalogEntry))
         : validator.catalog;
     const { valid, issues } =
-      customAssets.length > 0
+      customFurniture.length > 0
         ? validateLayout(layout, {
             catalog,
             requiredRevision: validator.requiredRevision,

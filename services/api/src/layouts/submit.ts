@@ -25,7 +25,7 @@ import { ApiError } from '../errors.js';
 import { recordModerationAction } from '../moderation/audit.js';
 import { writeRateLimitConfig } from '../rateLimit.js';
 import { requestPreview } from '../renderer/client.js';
-import { customAssetsForLayout } from '../renderer/customAssets.js';
+import { customAssetsForLayout, furnitureCatalogEntries } from '../renderer/customAssets.js';
 import { isUniqueViolation, parseAndValidateTags } from './metadata.js';
 import { attachTags, countUserSubmissionsSince, findLayoutBySha256 } from './query.js';
 import { toDetail } from './serialize.js';
@@ -125,8 +125,8 @@ export function registerSubmitRoutes(app: FastifyInstance, { config, db, upstrea
         // rather than rejecting every such layout as "unknown furniture".
         const customAssets = await customAssetsForLayout(db, parsedLayout);
         const catalog =
-          customAssets.length > 0
-            ? mergeFurnitureCatalog(validator.catalog, customAssets.map((asset) => asset.catalogEntry))
+          furnitureCatalogEntries(customAssets).length > 0
+            ? mergeFurnitureCatalog(validator.catalog, furnitureCatalogEntries(customAssets))
             : validator.catalog;
         const validation = validateLayout(parsedLayout, {
           catalog,
@@ -289,8 +289,8 @@ export function registerSubmitRoutes(app: FastifyInstance, { config, db, upstrea
 
         const customAssets = await customAssetsForLayout(db, parsedLayout);
         const catalog =
-          customAssets.length > 0
-            ? mergeFurnitureCatalog(validator.catalog, customAssets.map((asset) => asset.catalogEntry))
+          furnitureCatalogEntries(customAssets).length > 0
+            ? mergeFurnitureCatalog(validator.catalog, furnitureCatalogEntries(customAssets))
             : validator.catalog;
         const validation = validateLayout(parsedLayout, {
           catalog,

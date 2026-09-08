@@ -44,6 +44,28 @@ export async function simpleAssetZip(
   return zip.generateAsync({ type: 'nodebuffer' });
 }
 
+/** A custom-character zip (#105): exactly one 112×96 PNG, no manifest.json. */
+export async function characterZip(overrides: { pngWidth?: number; pngHeight?: number } = {}): Promise<Buffer> {
+  const zip = new JSZip();
+  zip.file('char.png', tinyPng(overrides.pngWidth ?? 112, overrides.pngHeight ?? 96));
+  return zip.generateAsync({ type: 'nodebuffer' });
+}
+
+/** A custom-pet zip (#105): `<id>/{manifest.json, pet.png}`, manifest is just `{id, name}`. */
+export async function petZip(
+  id: string,
+  name = 'Test Pet',
+  overrides: { pngWidth?: number; pngHeight?: number; includeManifest?: boolean } = {},
+): Promise<Buffer> {
+  const zip = new JSZip();
+  const dir = id;
+  if (overrides.includeManifest !== false) {
+    zip.file(`${dir}/manifest.json`, JSON.stringify({ id, name }));
+  }
+  zip.file(`${dir}/pet.png`, tinyPng(overrides.pngWidth ?? 96, overrides.pngHeight ?? 96));
+  return zip.generateAsync({ type: 'nodebuffer' });
+}
+
 /** pixel-art-mcp's own nested `assets/furniture/<ID>/manifest.json` zip shape. */
 export async function nestedAssetZip(id: string): Promise<Buffer> {
   const zip = new JSZip();

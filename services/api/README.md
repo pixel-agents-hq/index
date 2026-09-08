@@ -47,17 +47,25 @@ src/moderation/routes.ts GET /moderation/layouts — the moderation console's br
 src/users/routes.ts      GET /admin/users — read-only interacted-user directory
 src/authors/routes.ts    GET /authors/:id — public author identity/count
 
-src/assets/manifest.ts   the external-asset manifest schema + flattening (a hand-kept local
-                         copy of pixel-agents' own — see the file header for why it can't be
-                         a cross-package import)
-src/assets/decode.ts     unzips an upload, validates the manifest, decodes PNGs, assigns the
-                         final (possibly auto-suffixed) id
-src/assets/query.ts      SQL: list (newest, category/author filter), detail, id-collision lookups
+src/assets/zip.ts        shared zip/PNG plumbing (find a file, decode a PNG strictly, suffix a
+                         colliding id) — used by all three decode modules below (#105)
+src/assets/manifest.ts   the furniture-only external-asset manifest schema + flattening (a
+                         hand-kept local copy of pixel-agents' own — see the file header for
+                         why it can't be a cross-package import)
+src/assets/decode.ts     furniture: unzips an upload, validates the manifest, decodes PNGs,
+                         assigns the final (possibly auto-suffixed) id
+src/assets/decodeCharacter.ts  character (#105): one manifest-less 112×96 PNG, hand-ported
+                         frame-grid slicing from pixel-agents' own pngDecoder.ts
+src/assets/decodePet.ts  pet (#105): `{id,name}` manifest + one 96×96 PNG, same hand-ported-slicing approach
+src/assets/query.ts      SQL: list (newest, assetKind/category/author filter), detail,
+                         id-collision lookups, furniture-only catalog merge
 src/assets/serialize.ts  DB row -> public JSON shape, mirroring layouts/serialize.ts
 src/assets/schemas.ts    JSON Schemas for the custom-asset routes
 src/assets/routes.ts     GET /assets, /assets/catalog, /assets/:assetId{,/sprite.png}
-src/assets/submit.ts     POST /assets — web (Bearer) or bot (X-Api-Key) upload (#101). No
-                         moderator pre-publish review; a valid upload is live immediately
+src/assets/submit.ts     POST /assets — web (Bearer) or bot (X-Api-Key) upload (#101), one
+                         shared gate then dispatched by the required `assetKind` (#105:
+                         furniture|character|pet) to the matching decode module. No moderator
+                         pre-publish review; a valid upload is live immediately
 
 src/apiKeys/issue.ts     SQL: mint (hash-only persisted), revoke, list, verify-by-hash
 src/apiKeys/verify.ts    reads the X-Api-Key header — a dedicated header, never Authorization

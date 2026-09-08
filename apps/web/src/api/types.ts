@@ -276,8 +276,10 @@ export interface AssetFiles {
 
 export interface AssetSummary {
   assetId: string;
+  /** #105: furniture, character, or pet — a character/pet row has a null `category`. */
+  assetKind: 'furniture' | 'character' | 'pet';
   name: string;
-  category: string;
+  category: string | null;
   author: PublicAuthor;
   variantCount: number;
   createdAt: string;
@@ -307,5 +309,10 @@ export interface ListAssetsParams {
 
 export interface SubmitAssetParams {
   name: string;
+  /**
+   * #105: required by the API. This app only ever uploads furniture today —
+   * character/pet upload UI is a follow-up, not part of this change.
+   */
+  assetKind: 'furniture';
   category: string;
 }

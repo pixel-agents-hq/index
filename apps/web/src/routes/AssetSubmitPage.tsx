@@ -29,7 +29,7 @@ export function AssetSubmitPage() {
     setPublishing(true);
     setError(null);
     try {
-      const result = await submitAsset(file, { name, category }, accessToken);
+      const result = await submitAsset(file, { name, assetKind: 'furniture', category }, accessToken);
       void navigate(`/assets/${result.assetId}`);
     } catch (caught) {
       setError(caught instanceof ApiError ? caught : new ApiError(0, 'Something unexpected went wrong.'));

@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "layoutRevision": 1,
+  "cols": 4,
+  "rows": 4,
+  "tiles": [
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1
+  ],
+  "furniture": [],
+  "pets": [
+    {
+      "id": "ci-pet-1",
+      "petType": 0
+    }
+  ]
+}

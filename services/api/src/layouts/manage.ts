@@ -52,7 +52,7 @@ import type { RequestSchemas } from '../http.js';
 import { recordModerationAction } from '../moderation/audit.js';
 import { writeRateLimitConfig } from '../rateLimit.js';
 import { requestPreview } from '../renderer/client.js';
-import { customAssetsForLayout } from '../renderer/customAssets.js';
+import { customAssetsForLayout, furnitureCatalogEntries } from '../renderer/customAssets.js';
 import {
   isUniqueViolation,
   MAX_DESCRIPTION_LENGTH,
@@ -459,8 +459,8 @@ export function registerManageRoutes(app: FastifyInstance, { config, db, upstrea
         // layout references — see submit.ts's identical comment.
         const customAssets = await customAssetsForLayout(db, parsedLayout);
         const catalog =
-          customAssets.length > 0
-            ? mergeFurnitureCatalog(validator.catalog, customAssets.map((asset) => asset.catalogEntry))
+          furnitureCatalogEntries(customAssets).length > 0
+            ? mergeFurnitureCatalog(validator.catalog, furnitureCatalogEntries(customAssets))
             : validator.catalog;
         const validation = validateLayout(parsedLayout, {
           catalog,
