@@ -40,6 +40,11 @@ const tsvector = customType<{ data: string; driverData: string }>({
   dataType: () => 'tsvector',
 });
 
+/** Raw binary storage. Drizzle has no built-in `bytea` column type. */
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType: () => 'bytea',
+});
+
 const createdAt = () => timestamp('created_at', { withTimezone: true }).notNull().defaultNow();
 const updatedAt = () => timestamp('updated_at', { withTimezone: true }).notNull().defaultNow();
 
@@ -91,7 +96,7 @@ export const reportReason = pgEnum('report_reason', [
 
 export const reportStatus = pgEnum('report_status', ['open', 'resolved', 'dismissed']);
 
-export const auditTargetType = pgEnum('audit_target_type', ['layout', 'user', 'report']);
+export const auditTargetType = pgEnum('audit_target_type', ['layout', 'user', 'report', 'asset']);
 
 /**
  * Everything privileged that can happen, including owner actions — #9 requires
@@ -127,6 +132,8 @@ export const auditAction = pgEnum('audit_action', [
   'report.create',
   'report.resolve',
   'report.dismiss',
+  /** #101: a custom furniture asset published via POST /api/v1/assets. */
+  'asset.create',
 ]);
 
 // ── Tables ────────────────────────────────────────────────────────────────
@@ -335,6 +342,61 @@ export const layoutTags = pgTable(
   ],
 );
 
+/**
+ * A custom furniture asset (#101) — manifest + PNG(s) uploaded through
+ * `POST /api/v1/assets`, decoded into the same `CatalogEntry`/sprite-array
+ * shape `buildDynamicCatalog()` (pixel-agents' webview) already knows how to
+ * merge with the built-in catalog.
+ *
+ * No `visibility` column: #101 explicitly decided there is no moderator
+ * pre-publish review and no hide/delete flow for a first version — add one
+ * later if asked for, rather than carrying dead states now.
+ */
+export const customAssets = pgTable(
+  'custom_assets',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+
+    /**
+     * The public identifier — the manifest's own `id`, post-collision-suffix.
+     * This is what the browser/renderer catalog merge and every URL use.
+     */
+    assetId: text('asset_id').notNull(),
+    /** What the uploader actually submitted, before any suffix — kept for audit. */
+    requestedAssetId: text('requested_asset_id').notNull(),
+
+    name: text('name').notNull(),
+    category: text('category').notNull(),
+
+    /**
+     * The flattened, validated variants for this asset — one entry per
+     * rotation/state/animation member, `CatalogEntry`-shaped. Always at least
+     * one element.
+     */
+    manifest: jsonb('manifest').notNull(),
+    /** `Record<variantAssetId, string[][]>` — decoded sprite data, one key per manifest variant. */
+    sprites: jsonb('sprites').notNull(),
+    /** The original upload, verbatim — provenance, and a re-decode source if the pipeline ever changes. */
+    rawZip: bytea('raw_zip').notNull(),
+
+    authorUserId: uuid('author_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    uniqueIndex('custom_assets_asset_id_key').on(table.assetId),
+    // Mirrors the id character set the manifest schema (external-assets.md)
+    // and pixel-art-mcp's own `asset_id` validation both require.
+    check('custom_assets_asset_id_format', sql`${table.assetId} ~ '^[A-Z][A-Z0-9_]*$'`),
+    index('custom_assets_author_idx').on(table.authorUserId),
+    index('custom_assets_public_created_idx').on(table.createdAt.desc(), table.id.desc()),
+    index('custom_assets_category_idx').on(table.category),
+  ],
+);
+
 export const reports = pgTable(
   'reports',
   {
@@ -517,6 +579,8 @@ export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Layout = typeof layouts.$inferSelect;
 export type NewLayout = typeof layouts.$inferInsert;
+export type CustomAsset = typeof customAssets.$inferSelect;
+export type NewCustomAsset = typeof customAssets.$inferInsert;
 export type Tag = typeof tags.$inferSelect;
 export type Report = typeof reports.$inferSelect;
 export type NewReport = typeof reports.$inferInsert;

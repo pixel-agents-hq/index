@@ -17,6 +17,7 @@ describe('migrations', () => {
     expect(await tableNames(harness.client)).toEqual([
       'auth_login_codes',
       'auth_refresh_tokens',
+      'custom_assets',
       'discord_oauth_grants',
       'layout_tags',
       'layouts',

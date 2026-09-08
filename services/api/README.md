@@ -43,6 +43,18 @@ src/moderation/routes.ts GET /moderation/layouts — the moderation console's br
 
 src/users/routes.ts      GET /admin/users — read-only interacted-user directory
 src/authors/routes.ts    GET /authors/:id — public author identity/count
+
+src/assets/manifest.ts   the external-asset manifest schema + flattening (a hand-kept local
+                         copy of pixel-agents' own — see the file header for why it can't be
+                         a cross-package import)
+src/assets/decode.ts     unzips an upload, validates the manifest, decodes PNGs, assigns the
+                         final (possibly auto-suffixed) id
+src/assets/query.ts      SQL: list (newest, category/author filter), detail, id-collision lookups
+src/assets/serialize.ts  DB row -> public JSON shape, mirroring layouts/serialize.ts
+src/assets/schemas.ts    JSON Schemas for the custom-asset routes
+src/assets/routes.ts     GET /assets, /assets/catalog, /assets/:assetId{,/sprite.png}
+src/assets/submit.ts     POST /assets — web-authenticated upload (#101). No moderator
+                         pre-publish review; a valid upload is live immediately
 ```
 
 ```bash

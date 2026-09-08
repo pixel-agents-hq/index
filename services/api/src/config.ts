@@ -124,6 +124,13 @@ export interface ApiConfig {
    */
   maxLayoutBytes: number;
   /**
+   * #101: a custom-furniture upload's zip (manifest.json + PNGs), refused
+   * before it is ever handed to JSZip. Its own limit, not `maxLayoutBytes` —
+   * a zip of several small PNGs is a different size budget than a JSON
+   * document.
+   */
+  maxAssetZipBytes: number;
+  /**
    * Post-moderation means nothing stands between a stranger and the front
    * page except this and the rate-limit bucket below — a flood is a real,
    * cheap attack (#8). Checked against a real count of the user's last 24h
@@ -572,6 +579,7 @@ export function loadConfig(): ApiConfig {
     loginCodeTtlMs: intFromEnv('LOGIN_CODE_TTL_MS', 60_000, problems),
 
     maxLayoutBytes: intFromEnv('MAX_LAYOUT_BYTES', 2_000_000, problems),
+    maxAssetZipBytes: intFromEnv('MAX_ASSET_ZIP_BYTES', 5_000_000, problems),
     maxSubmissionsPerUserPerDay: intFromEnv('MAX_SUBMISSIONS_PER_USER_PER_DAY', 20, problems),
 
     rateLimit: {
