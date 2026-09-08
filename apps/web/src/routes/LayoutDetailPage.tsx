@@ -100,7 +100,7 @@ export function LayoutDetailPage() {
           {layout.tags.map((tag) => (
             <Link
               key={tag}
-              to={`/?tags=${encodeURIComponent(tag)}`}
+              to={`/layouts?tags=${encodeURIComponent(tag)}`}
               className="rounded border border-accent/40 px-2 py-0.5 text-xs text-accent hover:bg-accent-soft"
             >
               {tag}

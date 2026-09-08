@@ -40,7 +40,7 @@ src/api/client.ts                apiRequest() — the one fetch wrapper every ot
                                   client builds on; VITE_API_BASE_URL, never a hardcoded
                                   hostname; apiUrl() resolves API-relative asset paths
 src/api/authClient.ts            the OAuth code exchange, refresh, logout, /me
-src/api/manageClient.ts          submit, preview-check, my-layouts CRUD
+src/api/manageClient.ts          submit, preview-check, my-layouts CRUD, submitAsset (#101)
 src/api/moderationClient.ts      moderation browse + read-only admin user directory
 src/api/types.ts                 hand-written against services/api/src/layouts/schemas.ts
 src/api/useApi.ts                loading/error/ready as data, for every screen that calls
@@ -58,6 +58,20 @@ src/routes/Home.tsx              the gallery: FilterBar wired to useSearchParams
 src/routes/LayoutDetailPage.tsx  live/static office, formatted layout.json, full metadata,
                                   revision warning, clickable tags/author
 src/routes/AuthorPage.tsx        public author identity and all of their public layouts
+                                  and custom assets
+src/routes/assetFilters.ts      the URL <-> AssetFilters <-> API params translation for
+                                  /assets — deliberately smaller than filters.ts: the API
+                                  supports only category/author, no sort or search, and
+                                  this only ever offers exactly that
+src/routes/AssetsGallery.tsx    the custom-asset gallery, same shape as Home.tsx
+src/routes/AssetDetailPage.tsx  a custom asset's sprite, metadata, and an "Open in
+                                  editor" link — never gated: every published asset is
+                                  already in the editor's palette (live-office/assets.ts)
+src/routes/AssetSubmitPage.tsx  zip upload + name/category (#101) — no pre-publish
+                                  preview; that needs the real engine's rendering logic
+                                  and is #102's job
+src/components/AssetFilterBar.tsx  the /assets equivalent of FilterBar.tsx
+src/components/AssetCard.tsx    the /assets equivalent of LayoutCard.tsx
 src/live-office/                isolated iframe entry: thin wrapper around the pinned
                                   OfficeState/OfficeCanvas/ToolOverlay renderer, and —
                                   driven by the same postMessage protocol — the editor

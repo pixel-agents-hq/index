@@ -6,6 +6,7 @@ import { setCarpetSprites } from '../../../../vendor/pixel-agents/webview-ui/src
 import { setPetTemplates } from '../../../../vendor/pixel-agents/webview-ui/src/office/sprites/petSpriteData.js';
 import { setCharacterTemplates } from '../../../../vendor/pixel-agents/webview-ui/src/office/sprites/spriteData.js';
 import { setWallSprites } from '../../../../vendor/pixel-agents/webview-ui/src/office/wallTiles.js';
+import { API_BASE_URL } from '../api/client';
 
 interface PetAssets {
   pets: PetSpriteFrames[];
@@ -16,6 +17,37 @@ async function getJson<T>(base: string, filename: string): Promise<T> {
   const response = await fetch(`${base}/${filename}`);
   if (!response.ok) throw new Error(`Could not load ${filename} (${response.status}).`);
   return (await response.json()) as T;
+}
+
+interface CustomAssetCatalog {
+  catalog: CatalogEntry[];
+  sprites: Record<string, string[][]>;
+}
+
+/**
+ * Every published custom asset (#101), merged into the bundled catalog below
+ * before `buildDynamicCatalog()` ever runs. Calling that function a second
+ * time — once per source — was considered and rejected: it REPLACES its
+ * internal state rather than accumulating (confirmed by reading
+ * `furnitureCatalog.ts`'s own body: `dynamicCatalog = visibleEntries` is a
+ * straight reassignment, and its rotation/state/animation `Map`s are
+ * `.clear()`d at the top of every call), so a second call would silently
+ * make the bundled catalog disappear rather than add to it.
+ *
+ * A failure here degrades to "no custom assets today," not "no office at
+ * all" — a self-hoster's API being briefly unreachable must not break the
+ * built-in furniture catalog every viewer depends on.
+ */
+async function loadCustomAssetCatalog(): Promise<CustomAssetCatalog> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/v1/assets/catalog`);
+    if (!response.ok) throw new Error(`unexpected status ${response.status}`);
+    const body = (await response.json()) as CustomAssetCatalog;
+    return { catalog: body.catalog, sprites: body.sprites };
+  } catch (error) {
+    console.warn('[live-office] Could not load custom assets; continuing with built-ins only.', error);
+    return { catalog: [], sprites: {} };
+  }
 }
 
 /**
@@ -29,7 +61,7 @@ async function getJson<T>(base: string, filename: string): Promise<T> {
  */
 export async function loadLiveOfficeAssets(): Promise<LoadedAssetData> {
   const base = `${import.meta.env.BASE_URL}assets/pixel-agents/${__PIXEL_AGENTS_COMMIT__}`;
-  const [characters, floors, walls, carpets, catalog, furniture, petAssets] = await Promise.all([
+  const [characters, floors, walls, carpets, catalog, furniture, petAssets, customAssets] = await Promise.all([
     getJson<{ down: string[][][]; up: string[][][]; right: string[][][] }[]>(
       base,
       'characters.json',
@@ -40,13 +72,17 @@ export async function loadLiveOfficeAssets(): Promise<LoadedAssetData> {
     getJson<CatalogEntry[]>(base, 'furniture-catalog.json'),
     getJson<Record<string, string[][]>>(base, 'furniture.json'),
     getJson<PetAssets>(base, 'pets.json'),
+    loadCustomAssetCatalog(),
   ]);
 
   setCharacterTemplates(characters);
   setFloorSprites(floors);
   setWallSprites(walls);
   setCarpetSprites(carpets);
-  const loaded: LoadedAssetData = { catalog, sprites: furniture };
+  const loaded: LoadedAssetData = {
+    catalog: [...catalog, ...customAssets.catalog],
+    sprites: { ...furniture, ...customAssets.sprites },
+  };
   if (!buildDynamicCatalog(loaded)) {
     throw new Error('Pixel Agents furniture assets were empty.');
   }

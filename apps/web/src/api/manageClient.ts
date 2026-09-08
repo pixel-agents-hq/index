@@ -9,10 +9,12 @@
  */
 import { apiRequest, toQueryString } from './client';
 import type {
+  AssetDetail,
   LayoutDetail,
   ListOwnerLayoutsResponse,
   OwnerLayoutView,
   PatchLayoutBody,
+  SubmitAssetParams,
   SubmitLayoutParams,
 } from './types';
 
@@ -52,6 +54,21 @@ export function previewCheck(raw: string, accessToken?: string): Promise<Blob> {
     body: raw,
     ...(accessToken !== undefined ? { accessToken } : {}),
     parseAs: 'blob',
+  });
+}
+
+/**
+ * Publishes a custom furniture asset (#101) — a zip (manifest.json + PNGs),
+ * same "no un-send" reasoning as every other mutating call here, hence no
+ * `AbortSignal`. No pre-publish preview step (that's #102's job); the server
+ * validates and, on success, the asset is live in this same response.
+ */
+export function submitAsset(zip: Blob, params: SubmitAssetParams, accessToken: string): Promise<AssetDetail> {
+  return apiRequest(`/api/v1/assets${toQueryString(params)}`, {
+    method: 'POST',
+    body: zip,
+    accessToken,
+    headers: { 'content-type': 'application/zip' },
   });
 }
 

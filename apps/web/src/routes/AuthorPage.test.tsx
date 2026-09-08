@@ -53,6 +53,10 @@ describe('AuthorPage', () => {
           }],
         });
       }
+      if (url.includes('/api/v1/assets?')) {
+        expect(url).toContain('author=author-1');
+        return Response.json({ schemaVersion: 1, total: 0, assets: [], nextCursor: null });
+      }
       return new Response('not found', { status: 404 });
     }));
 

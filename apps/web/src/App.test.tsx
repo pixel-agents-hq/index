@@ -68,6 +68,37 @@ describe('App routing', () => {
     expect(await screen.findByRole('heading', { name: 'Blue Office' })).toBeInTheDocument();
   });
 
+  it('redirects the root route to /layouts/ (#101)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = requestUrl(input);
+        if (url.includes('/api/v1/tags')) return Response.json({ schemaVersion: 1, tags: [] });
+        if (url.includes('/api/v1/meta')) {
+          return Response.json({
+            schemaVersion: 1,
+            generatedAt: '2026-01-01T00:00:00.000Z',
+            apiCommit: null,
+            pixelAgents: { version: null, commit: null, layoutRevision: 0 },
+            count: 0,
+            discordInviteUrl: null,
+          });
+        }
+        return Response.json({ schemaVersion: 1, total: 0, layouts: [], nextCursor: null });
+      }),
+    );
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <ThemeProvider>
+          <AuthProvider>
+            <App />
+          </AuthProvider>
+        </ThemeProvider>
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText('No layouts published yet.')).toBeInTheDocument();
+  });
+
   it('renders NotFound for an unmatched route', () => {
     render(
       <MemoryRouter initialEntries={['/does-not-exist']}>

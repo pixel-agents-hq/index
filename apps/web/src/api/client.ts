@@ -9,7 +9,10 @@
 import type { OpenApiDocument } from './openapi';
 import type {
   ApiInfo,
+  AssetDetail,
   LayoutDetail,
+  ListAssetsParams,
+  ListAssetsResponse,
   ListLayoutsParams,
   ListLayoutsResponse,
   ListTagsResponse,
@@ -45,8 +48,13 @@ export class ApiError extends Error {
 
 export interface RequestOptions {
   method?: string;
-  /** A string sends as-is (used where byte-exact JSON matters — submit, replace). An object is JSON.stringify'd. */
-  body?: string | object;
+  /**
+   * A string sends as-is (used where byte-exact JSON matters — submit,
+   * replace). An object is JSON.stringify'd. A `Blob` sends as-is too (#101's
+   * custom-asset zip upload) — pair it with an explicit `headers['content-type']`,
+   * since a `Blob` body skips this function's own JSON default.
+   */
+  body?: string | object | Blob;
   accessToken?: string;
   headers?: Record<string, string>;
   /** Set for endpoints that return bytes (preview-check) rather than JSON. */
@@ -85,11 +93,13 @@ async function apiRequest<T>(path: string, options: RequestOptions = {}): Promis
     response = await fetch(`${API_BASE_URL}${path}`, {
       method,
       headers: {
-        ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
+        ...(body !== undefined && !(body instanceof Blob) ? { 'content-type': 'application/json' } : {}),
         ...(accessToken ? { authorization: `Bearer ${accessToken}` } : {}),
         ...headers,
       },
-      ...(body !== undefined ? { body: typeof body === 'string' ? body : JSON.stringify(body) } : {}),
+      ...(body !== undefined
+        ? { body: typeof body === 'string' || body instanceof Blob ? body : JSON.stringify(body) }
+        : {}),
       // `?? null`, not `signal`. RequestInit declares `signal?: AbortSignal | null`
       // with no `| undefined`, and exactOptionalPropertyTypes makes an explicit
       // undefined an error; `null` is the spec's own spelling of "no signal".
@@ -162,6 +172,14 @@ export function getLayout(slug: string, signal?: AbortSignal): Promise<LayoutDet
 
 export function getAuthor(id: string, signal?: AbortSignal): Promise<PublicAuthorResponse> {
   return apiRequest(`/api/v1/authors/${encodeURIComponent(id)}`, { signal });
+}
+
+export function listAssets(params: ListAssetsParams = {}, signal?: AbortSignal): Promise<ListAssetsResponse> {
+  return apiRequest(`/api/v1/assets${toQueryString(params)}`, { signal });
+}
+
+export function getAsset(assetId: string, signal?: AbortSignal): Promise<AssetDetail> {
+  return apiRequest(`/api/v1/assets/${encodeURIComponent(assetId)}`, { signal });
 }
 
 /** Exact uploaded layout.json text; callers may format it for presentation. */
