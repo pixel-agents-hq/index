@@ -96,7 +96,7 @@ export const reportReason = pgEnum('report_reason', [
 
 export const reportStatus = pgEnum('report_status', ['open', 'resolved', 'dismissed']);
 
-export const auditTargetType = pgEnum('audit_target_type', ['layout', 'user', 'report', 'asset']);
+export const auditTargetType = pgEnum('audit_target_type', ['layout', 'user', 'report', 'asset', 'apikey']);
 
 /**
  * Everything privileged that can happen, including owner actions — #9 requires
@@ -134,6 +134,9 @@ export const auditAction = pgEnum('audit_action', [
   'report.dismiss',
   /** #101: a custom furniture asset published via POST /api/v1/assets. */
   'asset.create',
+  /** #101: a moderator-issued machine credential for bot-originated asset uploads. */
+  'apikey.create',
+  'apikey.revoke',
 ]);
 
 // ── Tables ────────────────────────────────────────────────────────────────
@@ -529,6 +532,40 @@ export const authRefreshTokens = pgTable(
 );
 
 /**
+ * A moderator-issued machine credential (#101) — lets a Discord bot (the
+ * `animator` cog) authenticate `POST /api/v1/assets` as a service, not a
+ * human. Same shape as `authRefreshTokens` and the same reason: only
+ * `keyHash` (sha256 of the value the caller holds) is ever persisted, so a
+ * database dump alone can never be replayed as a working key.
+ *
+ * No `expiresAt` — unlike a refresh token, a bot credential is meant to be
+ * long-lived; revocation (`revokedAt`) is the only way out, same as this
+ * table's own precedent for "gone for good" state, `layouts.visibility =
+ * 'deleted'`: the row survives, only the capability to use it does not.
+ */
+export const apiKeys = pgTable(
+  'api_keys',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    /** Which moderator minted this key — audit trail, not an authorization check. */
+    createdByUserId: uuid('created_by_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    /** A human label ("animator bot"), shown back in the moderator UI — never the key itself. */
+    label: text('label').notNull(),
+    keyHash: text('key_hash').notNull(),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    uniqueIndex('api_keys_key_hash_key').on(table.keyHash),
+    check('api_keys_hash_format', sql`${table.keyHash} ~ '^[0-9a-f]{64}$'`),
+    index('api_keys_created_by_idx').on(table.createdByUserId),
+  ],
+);
+
+/**
  * A user's retained Discord OAuth grant. Tokens are AES-256-GCM ciphertext;
  * the key is supplied only to the API process and never stored in Postgres.
  */
@@ -581,6 +618,8 @@ export type Layout = typeof layouts.$inferSelect;
 export type NewLayout = typeof layouts.$inferInsert;
 export type CustomAsset = typeof customAssets.$inferSelect;
 export type NewCustomAsset = typeof customAssets.$inferInsert;
+export type ApiKey = typeof apiKeys.$inferSelect;
+export type NewApiKey = typeof apiKeys.$inferInsert;
 export type Tag = typeof tags.$inferSelect;
 export type Report = typeof reports.$inferSelect;
 export type NewReport = typeof reports.$inferInsert;

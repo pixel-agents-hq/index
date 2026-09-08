@@ -53,8 +53,13 @@ src/assets/query.ts      SQL: list (newest, category/author filter), detail, id-
 src/assets/serialize.ts  DB row -> public JSON shape, mirroring layouts/serialize.ts
 src/assets/schemas.ts    JSON Schemas for the custom-asset routes
 src/assets/routes.ts     GET /assets, /assets/catalog, /assets/:assetId{,/sprite.png}
-src/assets/submit.ts     POST /assets — web-authenticated upload (#101). No moderator
-                         pre-publish review; a valid upload is live immediately
+src/assets/submit.ts     POST /assets — web (Bearer) or bot (X-Api-Key) upload (#101). No
+                         moderator pre-publish review; a valid upload is live immediately
+
+src/apiKeys/issue.ts     SQL: mint (hash-only persisted), revoke, list, verify-by-hash
+src/apiKeys/verify.ts    reads the X-Api-Key header — a dedicated header, never Authorization
+src/apiKeys/serialize.ts the moderator-facing view of a key — never the hash or the value
+src/apiKeys/routes.ts    POST/GET /moderation/api-keys, POST /moderation/api-keys/:id/revoke
 ```
 
 ```bash

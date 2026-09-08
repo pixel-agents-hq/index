@@ -6,17 +6,27 @@
  * pre-publish review (#101's decision) — a valid upload is live the moment
  * this returns 201.
  *
- * Stage 1 of #101: web-auth only (`requireSubmissionCapability`, the same
- * Basic/guild-membership gate layout submission already uses — any guild
- * member may upload). The bot-authenticated (`X-Api-Key`) path is a
- * follow-up stage.
+ * Two independent ways in, same as `backup/export.ts`'s two-credential
+ * route: an `Authorization: Bearer` session (a human, via the web app —
+ * `requireSubmissionCapability`, the same Basic/guild-membership gate layout
+ * submission already uses) or `X-Api-Key` (a bot, e.g. `animator` — #101's
+ * moderator-issued machine credential, `apiKeys/verify.ts`). The two are
+ * mutually exclusive per request, and an API-key upload MUST also carry
+ * `discordUserId` in the query: the key authenticates the calling *service*,
+ * not a specific person, so attribution travels as data instead. Pixel Index
+ * cannot independently re-verify that id is a real guild member the way it
+ * can for a human's own OAuth session — the trust boundary for this path is
+ * custody of the key itself, not a per-call check (see #101's discussion).
  */
 
 import { knownFurnitureIds } from '@pixel-index/layout-core';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { FromSchema } from 'json-schema-to-ts';
 
+import { verifyApiKey } from '../apiKeys/issue.js';
+import { presentedApiKey } from '../apiKeys/verify.js';
 import { requireSubmissionCapability } from '../auth/capability.js';
+import { resolveOrCreateGhostUser } from '../auth/users.js';
 import type { ApiConfig } from '../config.js';
 import type { AnyDatabase } from '../db/client.js';
 import { one } from '../db/rows.js';
@@ -35,6 +45,36 @@ export interface AssetSubmitRoutesDeps {
   db: AnyDatabase;
 }
 
+interface Uploader {
+  user: schema.User;
+  actorLabel: string;
+}
+
+/** Resolves which of the two credentials authorized this request, and who the upload attributes to. */
+async function resolveUploader(
+  db: AnyDatabase,
+  config: ApiConfig,
+  request: FastifyRequest,
+  discordUserId: string | undefined,
+): Promise<Uploader> {
+  const presented = presentedApiKey(request);
+  if (presented !== undefined) {
+    const apiKey = await verifyApiKey(db, presented);
+    if (!apiKey) throw ApiError.unauthorized('Invalid or revoked API key.');
+    if (!discordUserId) {
+      throw ApiError.badRequest('discordUserId is required for an X-Api-Key-authenticated upload.');
+    }
+    const user = await resolveOrCreateGhostUser(db, discordUserId);
+    return { user, actorLabel: `${user.username} (via API key "${apiKey.label}")` };
+  }
+
+  if (discordUserId) {
+    throw ApiError.badRequest('discordUserId is only accepted with an X-Api-Key-authenticated upload.');
+  }
+  const user = await requireSubmissionCapability(db, config, request);
+  return { user, actorLabel: user.username };
+}
+
 export function registerAssetSubmitRoutes(app: FastifyInstance, { config, db }: AssetSubmitRoutesDeps): void {
   // eslint-disable-next-line @typescript-eslint/require-await
   app.register(async (instance) => {
@@ -49,7 +89,7 @@ export function registerAssetSubmitRoutes(app: FastifyInstance, { config, db }: 
       '/api/v1/assets',
       { ...writeRateLimitConfig(config), schema: { querystring: submitCustomAssetQuerySchema } },
       async (request, reply) => {
-        const user = await requireSubmissionCapability(db, config, request);
+        const { user, actorLabel } = await resolveUploader(db, config, request, request.query.discordUserId);
 
         const zipBuffer = request.body;
         if (zipBuffer.byteLength > config.maxAssetZipBytes) {
@@ -86,7 +126,7 @@ export function registerAssetSubmitRoutes(app: FastifyInstance, { config, db }: 
             );
             await recordModerationAction(tx, {
               actorUserId: user.id,
-              actorLabel: user.username,
+              actorLabel,
               action: 'asset.create',
               targetType: 'asset',
               targetId: row.id,

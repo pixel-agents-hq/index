@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import JSZip from 'jszip';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, assert, beforeAll, describe, expect, it } from 'vitest';
 
 import { signAccessToken } from '../auth/tokens.js';
 import { createTestDatabase, type Harness } from '../db/test-support/harness.js';
@@ -33,6 +33,24 @@ async function tokenFor(overrides: Parameters<typeof insertUser>[1] = {}) {
     config.accessTokenTtlMs,
   );
   return { user, accessToken };
+}
+
+/** Mints a real API key through the moderator route — the same path a real moderator would use. */
+async function mintApiKey(label: string): Promise<string> {
+  const { user, accessToken } = await tokenFor({ username: `mod-for-${label}`, role: 'moderator' });
+  // No Discord guild is configured in these tests, so `resolveCapability`
+  // (auth/capability.ts) only ever grants 'admin' or 'user' — same
+  // convention `layouts/manage.test.ts` establishes for exercising a
+  // moderator-gated route without a real guild.
+  assert(user.discordId !== null, 'insertUser did not give this user a Discord id');
+  config.discordAdminIds.push(user.discordId);
+  const response = await app.inject({
+    method: 'POST',
+    url: '/api/v1/moderation/api-keys',
+    payload: { label },
+    headers: { authorization: `Bearer ${accessToken}` },
+  });
+  return response.json<{ value: string }>().value;
 }
 
 function submit(query: string, zip: Buffer, headers: Record<string, string> = {}) {
@@ -115,5 +133,63 @@ describe('POST /api/v1/assets — the happy path', () => {
     });
     expect(response.statusCode).toBe(422);
     expect(response.json<EnvelopeBody>().issues?.length).toBeGreaterThan(0);
+  });
+});
+
+describe('POST /api/v1/assets — X-Api-Key (bot-originated) uploads', () => {
+  it('publishes and attributes to the given discordUserId, creating a stub user', async () => {
+    const key = await mintApiKey('animator-bot');
+    const response = await submit(
+      'name=Bot+Chair&category=chairs&discordUserId=222222222222222222',
+      await simpleAssetZip('BOT_CHAIR'),
+      { 'x-api-key': key },
+    );
+    expect(response.statusCode).toBe(201);
+    const body = response.json<PublicCustomAssetDetail>();
+    expect(body.assetId).toBe('BOT_CHAIR');
+    expect(body.author.discordId).toBe('222222222222222222');
+  });
+
+  it('rejects an unknown or malformed key', async () => {
+    const response = await submit(
+      'name=Bot+Chair&category=chairs&discordUserId=333333333333333333',
+      await simpleAssetZip('BAD_KEY_CHAIR'),
+      { 'x-api-key': 'not-a-real-key' },
+    );
+    expect(response.statusCode).toBe(401);
+  });
+
+  it('requires discordUserId alongside a valid API key', async () => {
+    const key = await mintApiKey('animator-bot-no-discord-id');
+    const response = await submit('name=Bot+Chair&category=chairs', await simpleAssetZip('NO_DISCORD_ID'), {
+      'x-api-key': key,
+    });
+    expect(response.statusCode).toBe(400);
+  });
+
+  it('rejects discordUserId on an ordinary web (Bearer) upload', async () => {
+    const { accessToken } = await tokenFor({ username: 'confused-web-uploader' });
+    const response = await submit(
+      'name=Chair&category=chairs&discordUserId=444444444444444444',
+      await simpleAssetZip('MIXED_AUTH_CHAIR'),
+      { authorization: `Bearer ${accessToken}` },
+    );
+    expect(response.statusCode).toBe(400);
+  });
+
+  it('reuses the same stub user across two uploads by the same Discord id', async () => {
+    const key = await mintApiKey('animator-bot-reuse');
+    const first = await submit(
+      'name=First&category=chairs&discordUserId=555555555555555555',
+      await simpleAssetZip('REUSE_ONE'),
+      { 'x-api-key': key },
+    );
+    const second = await submit(
+      'name=Second&category=chairs&discordUserId=555555555555555555',
+      await simpleAssetZip('REUSE_TWO'),
+      { 'x-api-key': key },
+    );
+    expect(first.json<PublicCustomAssetDetail>().author.discordId).toBe('555555555555555555');
+    expect(second.json<PublicCustomAssetDetail>().author.discordId).toBe('555555555555555555');
   });
 });

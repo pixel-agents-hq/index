@@ -16,6 +16,7 @@ import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 import Fastify, { type FastifyInstance } from 'fastify';
 
+import { registerApiKeyRoutes } from './apiKeys/routes.js';
 import { registerAssetRoutes } from './assets/routes.js';
 import { assetSharedSchemas } from './assets/schemas.js';
 import { registerAssetSubmitRoutes } from './assets/submit.js';
@@ -167,6 +168,7 @@ export async function buildServer({ config, pool, db }: BuildServerDeps): Promis
   registerSubmitRoutes(app, { config, db, upstream });
   registerAssetRoutes(app, { db });
   registerAssetSubmitRoutes(app, { config, db });
+  registerApiKeyRoutes(app, { config, db });
   registerManageRoutes(app, { config, db, upstream });
   registerUserAdminRoutes(app, { config, db });
   registerModerationRoutes(app, { config, db });

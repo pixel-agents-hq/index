@@ -97,6 +97,10 @@ export const submitCustomAssetQuerySchema = {
       type: 'string',
       enum: ['desks', 'chairs', 'electronics', 'storage', 'decor', 'misc', 'wall'],
     },
+    // Required only for an X-Api-Key-authenticated (bot-originated) upload —
+    // see submit.ts. A web upload attributes to the caller's own session and
+    // must not supply this.
+    discordUserId: { type: 'string', pattern: '^\\d{17,20}$' },
   },
   required: ['name', 'category'],
 } as const;

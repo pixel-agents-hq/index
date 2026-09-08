@@ -54,6 +54,31 @@ export async function upsertDiscordUser(
 }
 
 /**
+ * A user row for a Discord id that has never logged into the web app itself
+ * (#101) — a bot-originated custom-asset upload knows only the invoking
+ * Discord user's id, not their username/avatar. Reuses this table's own
+ * `discordId` lookup key rather than a separate "ghost user" table: the
+ * *existing* login-time upsert above (`upsertDiscordUser`) reconciles the
+ * stub with real profile data automatically, the moment that Discord user
+ * ever does log in themselves — same row, same id, filled in.
+ *
+ * The stub's `username` is a placeholder, not a real Discord handle — it is
+ * only ever shown back as an author credit until the reconciliation above
+ * overwrites it.
+ */
+export async function resolveOrCreateGhostUser(db: AnyDatabase, discordId: string): Promise<schema.User> {
+  const [existing] = await db.select().from(schema.users).where(eq(schema.users.discordId, discordId));
+  if (existing) return existing;
+
+  return one(
+    await db
+      .insert(schema.users)
+      .values({ discordId, username: `discord:${discordId}` })
+      .returning(),
+  );
+}
+
+/**
  * The fresh row behind an access token's `{id}` claim. `resolveUser`
  * (context.ts) deliberately never does this — it is the stateless-access-token
  * trade-off's whole point — capability.ts and owner routes fetch the complete
