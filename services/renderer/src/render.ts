@@ -18,6 +18,7 @@ import {
 import { type Browser, chromium } from 'playwright';
 
 import type { DevServer } from './devServer.js';
+import { decodeSpritePng } from './spritePng.js';
 
 const TILE_SIZE = 16;
 /**
@@ -48,6 +49,24 @@ const HOOKS_TIMEOUT_MS = 60_000;
 const FURNITURE_TIMEOUT_MS = 30_000;
 const PAINT_TIMEOUT_MS = 30_000;
 
+/**
+ * One custom (uploaded) furniture variant a layout references (#101),
+ * exactly as `services/api`'s `customAssetsForLayout` packaged it: a
+ * `CatalogEntry`-shaped object (with a synthetic `furniturePath` this
+ * service serves the PNG at) plus the base64-encoded PNG itself. This
+ * service has no database of its own — it can only render what the caller
+ * embeds directly in the request.
+ */
+export interface RenderCustomAsset {
+  catalogEntry: Record<string, unknown> & {
+    id: string;
+    furniturePath: string;
+    width: number;
+    height: number;
+  };
+  pngBase64: string;
+}
+
 export interface RenderOptions {
   /**
    * 1 renders the canonical preview. A fraction produces a thumbnail by
@@ -57,6 +76,8 @@ export interface RenderOptions {
    */
   scale?: number;
   timeoutMs?: number;
+  /** Custom furniture this layout places. Omit or empty for a layout with none. */
+  customAssets?: RenderCustomAsset[];
 }
 
 /** The filename the browser mock fetches as "the" layout. */
@@ -220,10 +241,11 @@ export class Renderer {
     if (!this.browser) throw new Error('Renderer has not been started.');
     const scale = options.scale ?? 1;
     const timeoutMs = options.timeoutMs ?? this.deps.defaultTimeoutMs;
+    const customAssets = options.customAssets ?? [];
 
     const release = await this.gate.acquire();
     try {
-      return await withTimeout(this.renderOnce(this.browser, layout, scale), timeoutMs);
+      return await withTimeout(this.renderOnce(this.browser, layout, scale, customAssets), timeoutMs);
     } finally {
       release();
     }
@@ -235,7 +257,12 @@ export class Renderer {
    * boundary — correctly, because `close()` could null the field in between.
    * Passing it pins the instance for the whole render.
    */
-  private async renderOnce(browser: Browser, layout: Layout, scale: number): Promise<Buffer> {
+  private async renderOnce(
+    browser: Browser,
+    layout: Layout,
+    scale: number,
+    customAssets: RenderCustomAsset[],
+  ): Promise<Buffer> {
     const { width, height, box: tileBox } = renderGeometry(layout);
 
     const context = await browser.newContext({
@@ -261,6 +288,45 @@ export class Renderer {
       await page.route(`**/assets/${this.defaultLayoutFile}`, (route) =>
         route.fulfill({ contentType: 'application/json', body: JSON.stringify(layout) }),
       );
+
+      // #101: custom (uploaded) furniture. The browser mock always fetches
+      // `furniture-catalog.json`, so that always needs appending to. Its
+      // sprite *pixels* come from one of two places, and — found by actually
+      // running this against the real dev server, not assumed from reading
+      // `browserMock.ts` alone — upstream's own `vite.config.ts` serves
+      // `assets/decoded/*.json` from a dev-only middleware that decodes
+      // whatever is really on disk, not a static file; it exists in every
+      // deployment this service can reach (the dev server needs `npm ci` in
+      // the vendor checkout to run at all, and that's what generates it), so
+      // the mock takes that fast path here, never the per-PNG-fetch fallback
+      // `decodeFurnitureFromPng` is for. Both are intercepted so this works
+      // whichever path a given upstream checkout actually takes.
+      if (customAssets.length > 0) {
+        await page.route('**/assets/furniture-catalog.json', async (route) => {
+          const response = await route.fetch();
+          const catalog = (await response.json()) as unknown[];
+          catalog.push(...customAssets.map((asset) => asset.catalogEntry));
+          await route.fulfill({ response, json: catalog });
+        });
+        await page.route('**/assets/decoded/furniture.json', async (route) => {
+          const response = await route.fetch();
+          // A checkout without the decoded-JSON middleware 404s here — leave
+          // it exactly as it was and let the mock's own PNG-fetch fallback
+          // (below) supply these sprites instead.
+          if (!response.ok()) return route.fulfill({ response });
+          const sprites = (await response.json()) as Record<string, string[][]>;
+          for (const asset of customAssets) {
+            const { id, width, height } = asset.catalogEntry;
+            sprites[id] = decodeSpritePng(Buffer.from(asset.pngBase64, 'base64'), width, height);
+          }
+          await route.fulfill({ response, json: sprites });
+        });
+        for (const asset of customAssets) {
+          await page.route(`**/assets/${asset.catalogEntry.furniturePath}`, (route) =>
+            route.fulfill({ contentType: 'image/png', body: Buffer.from(asset.pngBase64, 'base64') }),
+          );
+        }
+      }
 
       await page.goto(this.deps.devServer.url, { waitUntil: 'load' });
 

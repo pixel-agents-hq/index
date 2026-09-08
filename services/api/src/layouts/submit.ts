@@ -12,7 +12,7 @@
  * dedupe -> daily cap -> insert.
  */
 
-import { type Layout, layoutStats, sha256 } from '@pixel-index/layout-core';
+import { type Layout, layoutStats, mergeFurnitureCatalog, sha256, validateLayout } from '@pixel-index/layout-core';
 import type { FastifyInstance } from 'fastify';
 import type { FromSchema } from 'json-schema-to-ts';
 
@@ -25,6 +25,7 @@ import { ApiError } from '../errors.js';
 import { recordModerationAction } from '../moderation/audit.js';
 import { writeRateLimitConfig } from '../rateLimit.js';
 import { requestPreview } from '../renderer/client.js';
+import { customAssetsForLayout } from '../renderer/customAssets.js';
 import { isUniqueViolation, parseAndValidateTags } from './metadata.js';
 import { attachTags, countUserSubmissionsSince, findLayoutBySha256 } from './query.js';
 import { toDetail } from './serialize.js';
@@ -119,7 +120,19 @@ export function registerSubmitRoutes(app: FastifyInstance, { config, db, upstrea
           throw ApiError.badRequest('Body is not valid JSON.');
         }
 
-        const validation = validator.validateLayout(parsedLayout);
+        // #101: a layout may reference custom (uploaded) furniture the pinned
+        // static catalog knows nothing about — extend it before validating,
+        // rather than rejecting every such layout as "unknown furniture".
+        const customAssets = await customAssetsForLayout(db, parsedLayout);
+        const catalog =
+          customAssets.length > 0
+            ? mergeFurnitureCatalog(validator.catalog, customAssets.map((asset) => asset.catalogEntry))
+            : validator.catalog;
+        const validation = validateLayout(parsedLayout, {
+          catalog,
+          requiredRevision: validator.requiredRevision,
+          upstreamVersion: pin.version,
+        });
         if (!validation.valid) throw ApiError.validation(validation.issues);
 
         const hash = sha256(raw);
@@ -211,7 +224,7 @@ export function registerSubmitRoutes(app: FastifyInstance, { config, db, upstrea
         // coupling "can I submit" to "is the renderer up" would make a
         // secondary feature able to take down the core one. The next request
         // for this slug's preview (#6) tries the renderer fresh regardless.
-        const preview = await requestPreview(config.rendererUrl, parsedLayout);
+        const preview = await requestPreview(config.rendererUrl, parsedLayout, { customAssets });
         if (!preview.ok) {
           request.log.warn(
             { err: preview.error, slug: created.slug },
@@ -245,7 +258,7 @@ export function registerSubmitRoutes(app: FastifyInstance, { config, db, upstrea
               'wrong with your request.',
           );
         }
-        const { validator } = upstream;
+        const { pin, validator } = upstream;
 
         // Deliberately public, unlike every other route in this file: nothing
         // here is persisted, and Discord membership has no bearing on
@@ -274,10 +287,19 @@ export function registerSubmitRoutes(app: FastifyInstance, { config, db, upstrea
           throw ApiError.badRequest('Body is not valid JSON.');
         }
 
-        const validation = validator.validateLayout(parsedLayout);
+        const customAssets = await customAssetsForLayout(db, parsedLayout);
+        const catalog =
+          customAssets.length > 0
+            ? mergeFurnitureCatalog(validator.catalog, customAssets.map((asset) => asset.catalogEntry))
+            : validator.catalog;
+        const validation = validateLayout(parsedLayout, {
+          catalog,
+          requiredRevision: validator.requiredRevision,
+          upstreamVersion: pin.version,
+        });
         if (!validation.valid) throw ApiError.validation(validation.issues);
 
-        const preview = await requestPreview(config.rendererUrl, parsedLayout);
+        const preview = await requestPreview(config.rendererUrl, parsedLayout, { customAssets });
         if (!preview.ok) {
           if (preview.error.kind === 'invalid_layout') {
             throw new ApiError(500, 'internal_error', 'This layout could not be rendered.');

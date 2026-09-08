@@ -15,8 +15,10 @@ describe('migrations', () => {
 
   it('runs from empty to current on a clean Postgres', async () => {
     expect(await tableNames(harness.client)).toEqual([
+      'api_keys',
       'auth_login_codes',
       'auth_refresh_tokens',
+      'custom_assets',
       'discord_oauth_grants',
       'layout_tags',
       'layouts',

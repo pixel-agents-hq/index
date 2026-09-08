@@ -14,6 +14,26 @@ import { fileURLToPath } from 'node:url';
 
 import type { FurnitureCatalog, FurnitureEntry, UpstreamPin } from './types.js';
 
+/**
+ * Extends a furniture catalog with additional entries (#101's custom,
+ * uploaded furniture) — a plain `Map` copy-and-set, not a re-read of the
+ * upstream asset tree, so it is cheap enough to do per request. Used by both
+ * the API (submission/replace validation) and the renderer (its own
+ * validation before ever handing a layout to Chromium) so a layout
+ * referencing a published custom asset validates the same way in both
+ * places.
+ */
+export function mergeFurnitureCatalog(
+  base: FurnitureCatalog,
+  extra: Iterable<{ id: string } & FurnitureEntry>,
+): FurnitureCatalog {
+  const merged = new Map(base);
+  for (const { id, ...props } of extra) {
+    merged.set(id, props);
+  }
+  return merged;
+}
+
 export const UPSTREAM_ENV_VAR = 'PIXEL_AGENTS_DIR';
 
 /**

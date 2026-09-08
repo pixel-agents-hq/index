@@ -46,6 +46,9 @@ function Nav() {
       <Link to="/editor" className="text-ink hover:text-accent">
         Create
       </Link>
+      <Link to="/assets" className="text-ink hover:text-accent">
+        Assets
+      </Link>
       <Link to="/developer" className="text-ink hover:text-accent">
         Developer
       </Link>

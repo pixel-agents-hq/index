@@ -39,6 +39,7 @@ export {
   bundledLayoutRevision,
   furnitureCatalog,
   knownFurnitureIds,
+  mergeFurnitureCatalog,
   readJsonOrNull,
   resolveUpstreamDir,
   UPSTREAM_ENV_VAR,

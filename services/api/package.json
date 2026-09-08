@@ -32,12 +32,14 @@
     "fastify": "^5.8.5",
     "jose": "^6.2.8",
     "jszip": "^3.10.1",
-    "pg": "^8.16.3"
+    "pg": "^8.16.3",
+    "pngjs": "^7.0.0"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.3.14",
     "@fastify/type-provider-json-schema-to-ts": "^5.0.0",
     "@types/node": "^22.10.2",
+    "@types/pngjs": "^6.0.5",
     "@types/pg": "^8.15.6",
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",

@@ -23,6 +23,7 @@ export function testConfig(overrides: Partial<ApiConfig> = {}): ApiConfig {
     refreshTokenTtlMs: 30 * 24 * 60 * 60_000,
     loginCodeTtlMs: 60_000,
     maxLayoutBytes: 2_000_000,
+    maxAssetZipBytes: 5_000_000,
     maxSubmissionsPerUserPerDay: 20,
     rateLimit: { max: 100, windowMs: 60_000 },
     writeRateLimit: { max: 2, windowMs: 60_000 },

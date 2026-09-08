@@ -16,6 +16,10 @@ import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 import Fastify, { type FastifyInstance } from 'fastify';
 
+import { registerApiKeyRoutes } from './apiKeys/routes.js';
+import { registerAssetRoutes } from './assets/routes.js';
+import { assetSharedSchemas } from './assets/schemas.js';
+import { registerAssetSubmitRoutes } from './assets/submit.js';
 import { registerAuthContext } from './auth/context.js';
 import { registerAuthRoutes } from './auth/routes.js';
 import { registerAuthorRoutes } from './authors/routes.js';
@@ -148,6 +152,7 @@ export async function buildServer({ config, pool, db }: BuildServerDeps): Promis
   app.get('/openapi.json', { schema: { hide: true } }, () => app.swagger());
 
   for (const schema of sharedSchemas) app.addSchema(schema);
+  for (const schema of assetSharedSchemas) app.addSchema(schema);
 
   // Built once, shared by every route that needs to validate a layout against
   // the pinned upstream (submit's POST, manage's PUT .../layout) — see
@@ -161,6 +166,9 @@ export async function buildServer({ config, pool, db }: BuildServerDeps): Promis
   registerLayoutRoutes(app, { config, db });
   registerExportRoutes(app, { config, db });
   registerSubmitRoutes(app, { config, db, upstream });
+  registerAssetRoutes(app, { db });
+  registerAssetSubmitRoutes(app, { config, db });
+  registerApiKeyRoutes(app, { config, db });
   registerManageRoutes(app, { config, db, upstream });
   registerUserAdminRoutes(app, { config, db });
   registerModerationRoutes(app, { config, db });

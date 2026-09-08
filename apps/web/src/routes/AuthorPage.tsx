@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 
-import { ApiError, getAuthor, listLayouts } from '../api/client';
-import type { LayoutSummary, PublicAuthorResponse } from '../api/types';
+import { ApiError, getAuthor, listAssets, listLayouts } from '../api/client';
+import type { AssetSummary, LayoutSummary, PublicAuthorResponse } from '../api/types';
+import { AssetCard } from '../components/AssetCard';
 import { ErrorNotice } from '../components/ErrorNotice';
 import { LayoutCard } from '../components/LayoutCard';
 
@@ -12,6 +13,7 @@ export function AuthorPage() {
   const { id } = useParams<{ id: string }>();
   const [profile, setProfile] = useState<PublicAuthorResponse | null>(null);
   const [layouts, setLayouts] = useState<LayoutSummary[] | null>(null);
+  const [assets, setAssets] = useState<AssetSummary[] | null>(null);
   const [cursor, setCursor] = useState<string | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -27,12 +29,14 @@ export function AuthorPage() {
     Promise.all([
       getAuthor(id, controller.signal),
       listLayouts({ author: id, limit: PAGE_SIZE }, controller.signal),
+      listAssets({ author: id, limit: PAGE_SIZE }, controller.signal),
     ])
-      .then(([author, page]) => {
+      .then(([author, page, assetPage]) => {
         if (controller.signal.aborted) return;
         setProfile(author);
         setLayouts(page.layouts);
         setCursor(page.nextCursor);
+        setAssets(assetPage.assets);
       })
       .catch((caught: unknown) => {
         if (controller.signal.aborted) return;
@@ -95,6 +99,15 @@ export function AuthorPage() {
         >
           {loadingMore ? 'Loading…' : 'Load more'}
         </button>
+      )}
+
+      {assets && assets.length > 0 && (
+        <>
+          <h2 className="mt-10 font-display text-xl text-ink">Custom assets</h2>
+          <ul className="mt-4 grid list-none grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-6 p-0">
+            {assets.map((asset) => <li key={asset.assetId}><AssetCard asset={asset} /></li>)}
+          </ul>
+        </>
       )}
     </div>
   );

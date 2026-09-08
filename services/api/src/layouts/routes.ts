@@ -14,6 +14,7 @@ import type { AnyDatabase } from '../db/client.js';
 import { ApiError } from '../errors.js';
 import type { RequestSchemas } from '../http.js';
 import { requestPreview } from '../renderer/client.js';
+import { customAssetsForLayout } from '../renderer/customAssets.js';
 import { PUBLIC_REVALIDATED, respondNotModifiedIfMatching } from './caching.js';
 import {
   authorForLayout,
@@ -161,7 +162,8 @@ export function registerLayoutRoutes(app: FastifyInstance, { config, db }: Layou
     const layout = await getLayoutBySlug(db, slug);
     if (!layout) throw ApiError.notFound(`No public layout "${slug}".`);
 
-    const outcome = await requestPreview(config.rendererUrl, layout.layout);
+    const customAssets = await customAssetsForLayout(db, layout.layout);
+    const outcome = await requestPreview(config.rendererUrl, layout.layout, { customAssets });
     if (!outcome.ok) {
       request.log.warn({ err: outcome.error, slug }, 'preview render failed');
       if (outcome.error.kind === 'invalid_layout') {

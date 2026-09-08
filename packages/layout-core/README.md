@@ -41,6 +41,7 @@ const { valid, issues } = validator.validateLayout(uploadedLayout);
 | `validateSlug(slug)` | lowercase kebab-case |
 | `layoutStats(layout, opts?)` | cols, rows, furniture, areas, pets, carpets, seats, layoutRevision |
 | `furnitureCatalog(dir?)` / `knownFurnitureIds(dir?)` | what the pinned upstream can draw |
+| `mergeFurnitureCatalog(base, extra)` | extends a catalog with more entries (#101's custom, uploaded furniture) — a cheap `Map` copy, not a re-read of the upstream asset tree |
 | `bundledLayoutRevision(dir?)` / `upstreamPin(dir?)` | the pinned upstream's facts |
 | `sha256(input)` | dedupe and render-cache keys |
 | `layoutSchema` / `metaSchema` | the raw schemas, for serving and for 422 bodies |

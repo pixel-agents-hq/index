@@ -267,3 +267,45 @@ export interface PublicAuthorResponse {
   author: PublicAuthor;
   publicLayoutCount: number;
 }
+
+// ─── Custom assets (#101) ────────────────────────────────────────────────
+
+export interface AssetFiles {
+  sprite: string;
+}
+
+export interface AssetSummary {
+  assetId: string;
+  name: string;
+  category: string;
+  author: PublicAuthor;
+  variantCount: number;
+  createdAt: string;
+  updatedAt: string;
+  files: AssetFiles;
+}
+
+/** `manifest` is pixel-agents' own flattened `CatalogEntry[]` shape — opaque here, same treatment `LayoutDetail.layout` gets. */
+export interface AssetDetail extends AssetSummary {
+  manifest: unknown[];
+}
+
+export interface ListAssetsResponse {
+  schemaVersion: number;
+  total: number;
+  assets: AssetSummary[];
+  nextCursor: string | null;
+}
+
+export interface ListAssetsParams {
+  limit?: number;
+  cursor?: string;
+  category?: string;
+  /** A Discord user id (snowflake), same convention as ListLayoutsParams.author. */
+  author?: string;
+}
+
+export interface SubmitAssetParams {
+  name: string;
+  category: string;
+}

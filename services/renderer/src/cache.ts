@@ -33,6 +33,14 @@ export interface CacheKeyParts {
   upstreamCommit: string | null;
   upstreamVersion: string | null;
   scale: number;
+  /**
+   * The exact custom-assets payload the request carried (#101), serialised —
+   * not just "were there any". A custom asset is immutable once published
+   * (no edit endpoint exists), so this can't go stale in practice today, but
+   * folding in the content rather than just its presence costs nothing and
+   * means the cache key stays correct even if that ever changes.
+   */
+  customAssetsBytes?: string;
 }
 
 export function cacheKey(parts: CacheKeyParts): string {
@@ -43,6 +51,7 @@ export function cacheKey(parts: CacheKeyParts): string {
       parts.upstreamVersion ?? 'no-version',
       `scale=${parts.scale}`,
       `format=${RENDER_FORMAT}`,
+      parts.customAssetsBytes ?? 'no-custom-assets',
     // Joined with NUL, which cannot occur in any of the parts, so no
     // combination of fields can collide with a different combination.
     ].join('\u0000'),

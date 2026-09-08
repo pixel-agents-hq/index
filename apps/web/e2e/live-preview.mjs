@@ -186,6 +186,14 @@ function mockApi(layout, source) {
       });
       return;
     }
+    // #101: the live-office bundle merges this into the built-in furniture
+    // catalog before ever calling buildDynamicCatalog(). No custom assets
+    // exist in this fixture — an empty catalog is a legitimate, common
+    // response, not a special case this mock needs to fake data for.
+    if (pathname === '/api/v1/assets/catalog') {
+      sendJson(response, { schemaVersion: 1, catalog: [], sprites: {} });
+      return;
+    }
     if (pathname === '/api/v1/meta') {
       sendJson(response, {
         schemaVersion: 1,
