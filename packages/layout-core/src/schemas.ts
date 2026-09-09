@@ -18,4 +18,6 @@ const read = (file: string): Record<string, unknown> =>
 
 export const layoutSchema = read('layout.schema.json');
 export const metaSchema = read('meta.schema.json');
+export const customAssetFurnitureManifestSchema = read('custom-asset-furniture-manifest.schema.json');
+export const customAssetPetManifestSchema = read('custom-asset-pet-manifest.schema.json');
 export { SCHEMA_DIR };

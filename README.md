@@ -70,6 +70,10 @@ piece is, how they talk to each other, why the frontend and API are two separate
 with a bearer-token session instead of a cookie, and why every preview is drawn by a
 real browser rather than reimplemented.
 
+Building a tool that generates custom-asset upload zips (furniture, characters, pets)?
+[`docs/custom-asset-zip-contract.md`](docs/custom-asset-zip-contract.md) is the
+versioned, pinnable contract for that format.
+
 ## Development
 
 ```bash

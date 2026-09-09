@@ -13,7 +13,9 @@
       "import": "./dist/index.js"
     },
     "./schema/layout": "./schema/layout.schema.json",
-    "./schema/meta": "./schema/meta.schema.json"
+    "./schema/meta": "./schema/meta.schema.json",
+    "./schema/custom-asset-furniture-manifest": "./schema/custom-asset-furniture-manifest.schema.json",
+    "./schema/custom-asset-pet-manifest": "./schema/custom-asset-pet-manifest.schema.json"
   },
   "bin": {
     "pixel-index-validate": "./dist/cli.js"

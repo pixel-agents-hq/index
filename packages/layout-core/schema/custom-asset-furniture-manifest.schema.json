@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/pixel-agents-hq/index/packages/layout-core/schema/custom-asset-furniture-manifest.schema.json",
+  "title": "Pixel Index custom furniture manifest",
+  "description": "Shape of the manifest.json inside a custom-furniture upload zip for POST /api/v1/assets?assetKind=furniture (#101, #105). Mirrors services/api/src/assets/manifest.ts's validateManifestShape() field-for-field, including its permissiveness: unknown properties are not rejected, because the decode logic that actually enforces this contract doesn't reject them either. See docs/custom-asset-zip-contract.md for the zip-level rules (manifest.json location, PNG resolution) this schema doesn't cover.",
+  "$defs": {
+    "assetNode": {
+      "type": "object",
+      "required": ["type", "id", "file", "width", "height", "footprintW", "footprintH"],
+      "properties": {
+        "type": { "const": "asset" },
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]*$",
+          "description": "Uppercase letters, digits, underscore, starting with a letter."
+        },
+        "file": { "type": "string", "description": "PNG path, resolved relative to manifest.json's own directory in the zip." },
+        "width": { "type": "number" },
+        "height": { "type": "number" },
+        "footprintW": { "type": "number" },
+        "footprintH": { "type": "number" },
+        "orientation": { "type": "string" },
+        "state": { "type": "string" },
+        "frame": { "type": "number" },
+        "mirrorSide": { "type": "boolean" }
+      }
+    },
+    "groupNode": {
+      "type": "object",
+      "required": ["type", "members"],
+      "properties": {
+        "type": { "const": "group" },
+        "groupType": {
+          "type": "string",
+          "enum": ["rotation", "state", "animation"],
+          "description": "Defaults to \"rotation\" when omitted, matching decodeFurnitureZip()'s rootNode()."
+        },
+        "rotationScheme": { "type": "string" },
+        "orientation": { "type": "string" },
+        "state": { "type": "string" },
+        "members": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/manifestNode" }
+        }
+      }
+    },
+    "manifestNode": {
+      "oneOf": [{ "$ref": "#/$defs/assetNode" }, { "$ref": "#/$defs/groupNode" }]
+    }
+  },
+  "type": "object",
+  "required": ["id", "name", "category", "type"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9_]*$",
+      "description": "Uppercase letters, digits, underscore, starting with a letter. This is the requested asset id — pixel-index suffixes it (_2, _3, ...) on collision."
+    },
+    "name": { "type": "string", "minLength": 1 },
+    "category": {
+      "type": "string",
+      "enum": ["desks", "chairs", "electronics", "storage", "decor", "misc", "wall"],
+      "description": "Pixel-agents' current 7-value category set, kept as-is for upstream parity (#105) — storage included even though no bundled manifest uses it today."
+    },
+    "canPlaceOnWalls": { "type": "boolean" },
+    "canPlaceOnSurfaces": { "type": "boolean" },
+    "backgroundTiles": { "type": "integer", "minimum": 0 },
+    "type": {
+      "type": "string",
+      "enum": ["asset", "group"],
+      "description": "\"asset\" is one placeable variant with its own PNG; \"group\" fans out into rotation/state/animation members, each recursively an asset or a nested group."
+    },
+    "file": { "type": "string", "description": "Required, and only meaningful, when type is \"asset\"." },
+    "width": { "type": "number" },
+    "height": { "type": "number" },
+    "footprintW": { "type": "number" },
+    "footprintH": { "type": "number" },
+    "groupType": {
+      "type": "string",
+      "enum": ["rotation", "state", "animation"],
+      "description": "Only meaningful when type is \"group\". Defaults to \"rotation\" when omitted."
+    },
+    "rotationScheme": { "type": "string" },
+    "members": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/manifestNode" },
+      "description": "Required, and only meaningful, when type is \"group\"."
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "type": { "const": "asset" } } },
+      "then": { "required": ["file", "width", "height", "footprintW", "footprintH"] }
+    },
+    {
+      "if": { "properties": { "type": { "const": "group" } } },
+      "then": { "required": ["members"] }
+    }
+  ]
+}
