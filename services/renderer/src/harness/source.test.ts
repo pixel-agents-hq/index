@@ -44,6 +44,17 @@ describe('loadSeedLayouts', () => {
     // green check — it looks exactly like success.
     expect(() => loadSeedLayouts(seedDir({}))).toThrow(HarnessInfraError);
   });
+
+  it('reads a sibling custom-assets.json when present (#105)', () => {
+    const dir = seedDir({ 'custom-furniture': { cols: 1 }, plain: { cols: 2 } });
+    const customAssets = [{ kind: 'furniture', catalogEntry: { id: 'X' }, pngBase64: 'AA==' }];
+    fs.writeFileSync(path.join(dir, 'custom-furniture', 'custom-assets.json'), JSON.stringify(customAssets));
+
+    const layouts = loadSeedLayouts(dir);
+    expect(layouts.find((l) => l.slug === 'custom-furniture')?.customAssets).toEqual(customAssets);
+    // A slug with no custom-assets.json carries none at all, not an empty array.
+    expect(layouts.find((l) => l.slug === 'plain')?.customAssets).toBeUndefined();
+  });
 });
 
 describe('fetchExportedLayouts', () => {

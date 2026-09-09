@@ -27,7 +27,8 @@ export function AssetCard({ asset }: { asset: AssetSummary }) {
           by <AuthorLink author={asset.author} />
         </p>
         <p className="m-0 text-xs text-subtle">
-          {asset.category} · {asset.variantCount} variant{asset.variantCount === 1 ? '' : 's'}
+          {/* #105: category is furniture-only — a character/pet card falls back to its kind. */}
+          {asset.category ?? asset.assetKind} · {asset.variantCount} variant{asset.variantCount === 1 ? '' : 's'}
         </p>
       </div>
     </article>

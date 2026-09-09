@@ -5,8 +5,10 @@ import type { PublicAuthor } from '../layouts/serialize.js';
 
 export interface PublicCustomAssetSummary {
   assetId: string;
+  assetKind: schema.CustomAsset['assetKind'];
   name: string;
-  category: string;
+  /** Furniture only (#105) — null for characters and pets. */
+  category: string | null;
   author: PublicAuthor;
   variantCount: number;
   createdAt: string;
@@ -38,6 +40,7 @@ function files(assetId: string): PublicCustomAssetSummary['files'] {
 export function toSummary(asset: schema.CustomAsset, author: schema.User | null): PublicCustomAssetSummary {
   return {
     assetId: asset.assetId,
+    assetKind: asset.assetKind,
     name: asset.name,
     category: asset.category,
     author: assetAuthor(author),

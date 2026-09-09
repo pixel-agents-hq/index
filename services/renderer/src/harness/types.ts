@@ -10,10 +10,20 @@
 
 import type { UpstreamPin, ValidationIssue } from '@pixel-index/layout-core';
 
+import type { RenderCustomAsset } from '../render.js';
+
 /** A layout as the gate sees it, whatever it was sourced from. */
 export interface HarnessLayout {
   slug: string;
   layout: unknown;
+  /**
+   * Custom furniture/character/pet this layout needs to prove renders (#105)
+   * — the same shape `services/api` embeds in a real `/render` request. Seed
+   * layouts opt in via a sibling `custom-assets.json`; the live index never
+   * supplies this (a real render request already carries it separately, and
+   * the gate isn't re-deriving `customAssetsForLayout` here).
+   */
+  customAssets?: RenderCustomAsset[];
 }
 
 export type LayoutOutcome =

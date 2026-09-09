@@ -99,6 +99,13 @@
       "when": 1788850758564,
       "tag": "0013_tired_meltdown",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1788903863326,
+      "tag": "0014_asset_kind",
+      "breakpoints": true
     }
   ]
 }

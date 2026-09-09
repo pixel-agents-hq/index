@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "layoutRevision": 1,
+  "cols": 4,
+  "rows": 4,
+  "tiles": [
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1
+  ],
+  "furniture": [
+    {
+      "uid": "ci-furniture-1",
+      "type": "CI_CUSTOM_CHAIR",
+      "col": 1,
+      "row": 1
+    }
+  ],
+  "pets": []
+}

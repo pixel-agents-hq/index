@@ -50,22 +50,41 @@ const FURNITURE_TIMEOUT_MS = 30_000;
 const PAINT_TIMEOUT_MS = 30_000;
 
 /**
- * One custom (uploaded) furniture variant a layout references (#101),
- * exactly as `services/api`'s `customAssetsForLayout` packaged it: a
- * `CatalogEntry`-shaped object (with a synthetic `furniturePath` this
- * service serves the PNG at) plus the base64-encoded PNG itself. This
- * service has no database of its own — it can only render what the caller
- * embeds directly in the request.
+ * One custom (uploaded) asset a render needs, exactly as `services/api`'s
+ * `customAssetsForLayout` packaged it (#101 furniture, #105 characters +
+ * pets). This service has no database of its own — it can only render what
+ * the caller embeds directly in the request, and each kind needs a different
+ * shape at the browser boundary (see the interception block in `renderOnce`).
  */
-export interface RenderCustomAsset {
-  catalogEntry: Record<string, unknown> & {
-    id: string;
-    furniturePath: string;
-    width: number;
-    height: number;
-  };
-  pngBase64: string;
-}
+export type RenderCustomAsset =
+  | {
+      kind: 'furniture';
+      /** `CatalogEntry`-shaped, plus a synthetic `furniturePath` this service serves the PNG at. */
+      catalogEntry: Record<string, unknown> & {
+        id: string;
+        furniturePath: string;
+        width: number;
+        height: number;
+      };
+      pngBase64: string;
+    }
+  | {
+      kind: 'character';
+      /** Exactly `assets/decoded/characters.json`'s own per-entry shape — appended, not re-encoded. */
+      sprites: { down: string[][][]; up: string[][][]; right: string[][][] };
+    }
+  | {
+      kind: 'pet';
+      name: string;
+      /** Exactly `petSpritesLoaded`'s own per-pet shape (`core/messages.ts`'s `PetSpriteFrameSet`) — appended, not re-encoded. */
+      frames: {
+        walkDown: string[][][];
+        idleDown: string[][][];
+        walkUp: string[][][];
+        idleUp: string[][][];
+        walkRight: string[][][];
+      };
+    };
 
 export interface RenderOptions {
   /**
@@ -289,6 +308,10 @@ export class Renderer {
         route.fulfill({ contentType: 'application/json', body: JSON.stringify(layout) }),
       );
 
+      const furnitureAssets = customAssets.filter((asset) => asset.kind === 'furniture');
+      const characterAssets = customAssets.filter((asset) => asset.kind === 'character');
+      const petAssets = customAssets.filter((asset) => asset.kind === 'pet');
+
       // #101: custom (uploaded) furniture. The browser mock always fetches
       // `furniture-catalog.json`, so that always needs appending to. Its
       // sprite *pixels* come from one of two places, and — found by actually
@@ -301,11 +324,11 @@ export class Renderer {
       // the mock takes that fast path here, never the per-PNG-fetch fallback
       // `decodeFurnitureFromPng` is for. Both are intercepted so this works
       // whichever path a given upstream checkout actually takes.
-      if (customAssets.length > 0) {
+      if (furnitureAssets.length > 0) {
         await page.route('**/assets/furniture-catalog.json', async (route) => {
           const response = await route.fetch();
           const catalog = (await response.json()) as unknown[];
-          catalog.push(...customAssets.map((asset) => asset.catalogEntry));
+          catalog.push(...furnitureAssets.map((asset) => asset.catalogEntry));
           await route.fulfill({ response, json: catalog });
         });
         await page.route('**/assets/decoded/furniture.json', async (route) => {
@@ -315,17 +338,86 @@ export class Renderer {
           // (below) supply these sprites instead.
           if (!response.ok()) return route.fulfill({ response });
           const sprites = (await response.json()) as Record<string, string[][]>;
-          for (const asset of customAssets) {
+          for (const asset of furnitureAssets) {
             const { id, width, height } = asset.catalogEntry;
             sprites[id] = decodeSpritePng(Buffer.from(asset.pngBase64, 'base64'), width, height);
           }
           await route.fulfill({ response, json: sprites });
         });
-        for (const asset of customAssets) {
+        for (const asset of furnitureAssets) {
           await page.route(`**/assets/${asset.catalogEntry.furniturePath}`, (route) =>
             route.fulfill({ contentType: 'image/png', body: Buffer.from(asset.pngBase64, 'base64') }),
           );
         }
+      }
+
+      // #105: custom (uploaded) characters. `browserMock.ts` fetches
+      // `assets/decoded/characters.json` exactly like furniture's decoded
+      // JSON — verified against the real dev server, same as furniture above
+      // — so the same append-to-the-fetched-array technique generalizes
+      // directly. No per-PNG fallback route: this vendored checkout always
+      // serves the decoded endpoint (same bet furniture's own comment makes).
+      if (characterAssets.length > 0) {
+        await page.route('**/assets/decoded/characters.json', async (route) => {
+          const response = await route.fetch();
+          const characters = (await response.json()) as unknown[];
+          characters.push(...characterAssets.map((asset) => asset.sprites));
+          await route.fulfill({ response, json: characters });
+        });
+      }
+
+      // #105: custom (uploaded) pets. Unlike furniture and characters, there
+      // is no fetch to intercept here — traced all the way through
+      // `browserMock.ts` and it never requests or dispatches anything
+      // pet-related at all (confirmed against a real checkout, not assumed):
+      // pet templates only ever reach the app via a `petSpritesLoaded`
+      // `postMessage`, which the real VS Code extension host/standalone
+      // server sends and this dev-server mock never does. There is also no
+      // bundled pet in this checkout to preserve — pets are wholly an
+      // external-loading feature, so this is the only way *any* pet, custom
+      // or otherwise, ever renders through this service.
+      //
+      // Synthesized by wrapping `window.dispatchEvent`, before the page's own
+      // scripts run, so it can inject our message immediately ahead of every
+      // `layoutLoaded` dispatch — pet templates must be known before the
+      // layout's pet roster is reconciled against them, and patching the
+      // dispatch call is the only hook available since this isn't a network
+      // request `page.route()` can intercept.
+      //
+      // NOT one-shot: found by actually running this against the real dev
+      // server, not assumed from reading the mock's source alone — Vite's dev
+      // mode double-invokes effects (React StrictMode), so `dispatchMockMessages()`
+      // itself runs twice, and only the OfficeState the SECOND `layoutLoaded`
+      // constructs survives. Gating this to fire once (before only the first)
+      // left a live app whose pets were never actually placed — `getPets()`
+      // reported none — while every log line upstream of pet placement still
+      // looked correct, which is exactly the kind of silent gap the CI guard
+      // (#105 decision #6) exists to keep catching. `setPetTemplates` is a
+      // plain replace of a module-level array, so re-sending ahead of every
+      // `layoutLoaded` is idempotent, not merely tolerated.
+      if (petAssets.length > 0) {
+        await context.addInitScript((pets: { name: string; frames: unknown }[]) => {
+          const realDispatch = window.dispatchEvent.bind(window);
+          window.dispatchEvent = (event: Event) => {
+            if (
+              event instanceof MessageEvent &&
+              event.data &&
+              typeof event.data === 'object' &&
+              (event.data as { type?: unknown }).type === 'layoutLoaded'
+            ) {
+              realDispatch(
+                new MessageEvent('message', {
+                  data: {
+                    type: 'petSpritesLoaded',
+                    pets: pets.map((pet) => pet.frames),
+                    petNames: pets.map((pet) => pet.name),
+                  },
+                }),
+              );
+            }
+            return realDispatch(event);
+          };
+        }, petAssets.map((asset) => ({ name: asset.name, frames: asset.frames })));
       }
 
       await page.goto(this.deps.devServer.url, { waitUntil: 'load' });

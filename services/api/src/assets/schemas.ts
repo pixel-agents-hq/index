@@ -11,15 +11,17 @@ export const customAssetSummarySchema = {
   type: 'object',
   properties: {
     assetId: { type: 'string' },
+    assetKind: { type: 'string', enum: ['furniture', 'character', 'pet'] },
     name: { type: 'string' },
-    category: { type: 'string' },
+    // Furniture only (#105) — null for characters and pets.
+    category: { type: ['string', 'null'] },
     author: { $ref: 'PublicAuthor#' },
     variantCount: { type: 'integer' },
     createdAt: { type: 'string', format: 'date-time' },
     updatedAt: { type: 'string', format: 'date-time' },
     files: filesSchema,
   },
-  required: ['assetId', 'name', 'category', 'author', 'variantCount', 'createdAt', 'updatedAt', 'files'],
+  required: ['assetId', 'assetKind', 'name', 'category', 'author', 'variantCount', 'createdAt', 'updatedAt', 'files'],
 } as const;
 
 export const customAssetDetailSchema = {
@@ -47,6 +49,7 @@ export const listCustomAssetsQuerySchema = {
   properties: {
     limit: { type: 'integer', minimum: 1, maximum: 100, default: 24 },
     cursor: { type: 'string' },
+    assetKind: { type: 'string', enum: ['furniture', 'character', 'pet'] },
     category: { type: 'string' },
     // A Discord user id (snowflake), same convention as /api/v1/layouts?author=.
     author: { type: 'string' },
@@ -88,11 +91,22 @@ export const customAssetCatalogResponseSchema = {
   },
 } as const;
 
+/**
+ * `assetKind` is required, not defaulted (#105 decision): the route now
+ * covers three structurally different upload shapes, so which one a given
+ * request means has to be explicit rather than inferred or assumed.
+ * `category` is required only alongside `assetKind: 'furniture'` — checked in
+ * `submit.ts` before decode, the same way `resolveUploader` already does
+ * manual cross-field validation for `discordUserId` (JSON Schema's
+ * conditional keywords would need `if`/`then` here for one extra field,
+ * which is more machinery than the one check it replaces).
+ */
 export const submitCustomAssetQuerySchema = {
   type: 'object',
   additionalProperties: false,
   properties: {
     name: { type: 'string', minLength: 1, maxLength: 60 },
+    assetKind: { type: 'string', enum: ['furniture', 'character', 'pet'] },
     category: {
       type: 'string',
       enum: ['desks', 'chairs', 'electronics', 'storage', 'decor', 'misc', 'wall'],
@@ -102,5 +116,5 @@ export const submitCustomAssetQuerySchema = {
     // must not supply this.
     discordUserId: { type: 'string', pattern: '^\\d{17,20}$' },
   },
-  required: ['name', 'category'],
+  required: ['name', 'assetKind'],
 } as const;

@@ -9,10 +9,13 @@
  * anywhere in the zip, PNGs alongside it, resolved relative to its own
  * directory. No translation layer between what pixel-art-mcp ships and what
  * this accepts, by design (issue #101).
+ *
+ * The zip/PNG plumbing this shares with `decodeCharacter.ts`/`decodePet.ts`
+ * lives in `zip.ts` (#105) — this module keeps only what's furniture-specific:
+ * manifest-tree flattening and the category-driven `isDesk` derivation.
  */
 
 import JSZip from 'jszip';
-import { PNG } from 'pngjs';
 
 import { ApiError } from '../errors.js';
 import {
@@ -24,8 +27,10 @@ import {
   type ManifestNode,
   validateManifestShape,
 } from './manifest.js';
+import { decodePng, findNamedTextEntry, firstFreeId, type IdCollisionChecker, issue } from './zip.js';
 
-export interface DecodedAsset {
+export interface DecodedFurnitureAsset {
+  assetKind: 'furniture';
   /** The id actually assigned — may differ from the manifest's own if it collided. */
   assetId: string;
   requestedAssetId: string;
@@ -34,65 +39,6 @@ export interface DecodedAsset {
   /** One entry per flattened variant, `id` rewritten to the assigned root id's namespace. */
   manifest: FlattenedAsset[];
   sprites: Record<string, string[][]>;
-}
-
-/** Checks a candidate id (and everywhere it appears in a manifest tree) for uniqueness. */
-export type IdCollisionChecker = (id: string) => boolean;
-
-function issue(path: string, message: string): ApiError {
-  return ApiError.validation([{ code: 'meta.schema', path, message }], 'Invalid custom asset upload.');
-}
-
-/**
- * Strict `pngToSpriteData`: rejects a PNG whose actual dimensions don't match
- * the manifest's declared `width`/`height`, rather than upstream's own
- * silent-warn-and-misread-the-buffer behavior (`core/src/assets/pngDecoder.ts`)
- * — the right default for a bundled, trusted asset pack is not the right
- * default for an untrusted upload.
- */
-function decodePng(buffer: Buffer, width: number, height: number, path: string): string[][] {
-  let png: PNG;
-  try {
-    png = PNG.sync.read(buffer);
-  } catch {
-    throw issue(path, 'Could not be parsed as a PNG.');
-  }
-  if (png.width !== width || png.height !== height) {
-    throw issue(
-      path,
-      `Declared ${width}×${height} but the PNG is actually ${png.width}×${png.height}.`,
-    );
-  }
-
-  const sprite: string[][] = [];
-  for (let y = 0; y < height; y++) {
-    const row: string[] = [];
-    for (let x = 0; x < width; x++) {
-      const i = (y * png.width + x) * 4;
-      const r = png.data[i];
-      const g = png.data[i + 1];
-      const b = png.data[i + 2];
-      const a = png.data[i + 3];
-      row.push(a === undefined || a < 2 ? '' : toHex(r ?? 0, g ?? 0, b ?? 0, a));
-    }
-    sprite.push(row);
-  }
-  return sprite;
-}
-
-function toHex(r: number, g: number, b: number, a: number): string {
-  const hex = (n: number) => n.toString(16).padStart(2, '0');
-  return a < 255 ? `#${hex(r)}${hex(g)}${hex(b)}${hex(a)}` : `#${hex(r)}${hex(g)}${hex(b)}`;
-}
-
-/** Suffixes `_2`, `_3`, ... onto `id` until `isTaken` says no one holds it. */
-function firstFreeId(id: string, isTaken: IdCollisionChecker): string {
-  if (!isTaken(id)) return id;
-  for (let n = 2; n < 1000; n += 1) {
-    const candidate = `${id}_${n}`;
-    if (!isTaken(candidate)) return candidate;
-  }
-  throw new ApiError(500, 'internal_error', 'Could not find a free asset id.');
 }
 
 function rootNode(manifest: FurnitureManifest): ManifestNode {
@@ -131,34 +77,12 @@ function rewriteIds(assets: FlattenedAsset[], fromRoot: string, toRoot: string):
   }));
 }
 
-/**
- * Finds `manifest.json` anywhere in the zip and resolves PNG paths relative
- * to its directory — handles both pixel-art-mcp's nested
- * `assets/furniture/<ID>/manifest.json` shape and a flat root-level upload.
- */
-async function findManifestEntry(zip: JSZip): Promise<{ dir: string; text: string }> {
-  const candidates = Object.keys(zip.files).filter((name) => name.split('/').pop() === 'manifest.json');
-  if (candidates.length === 0) {
-    throw issue('/', 'The zip does not contain a manifest.json.');
-  }
-  if (candidates.length > 1) {
-    throw issue('/', 'The zip must contain exactly one manifest.json.');
-  }
-  const path = candidates[0];
-  if (path === undefined) throw issue('/', 'The zip does not contain a manifest.json.');
-  const entry = zip.file(path);
-  if (!entry) throw issue('/', 'The zip does not contain a manifest.json.');
-  const text = await entry.async('text');
-  const dir = path.includes('/') ? path.slice(0, path.lastIndexOf('/') + 1) : '';
-  return { dir, text };
-}
-
-export async function decodeAssetZip(
+export async function decodeFurnitureZip(
   zipBuffer: Buffer,
   name: string,
   category: string,
   isIdTaken: IdCollisionChecker,
-): Promise<DecodedAsset> {
+): Promise<DecodedFurnitureAsset> {
   let zip: JSZip;
   try {
     zip = await JSZip.loadAsync(zipBuffer);
@@ -166,7 +90,9 @@ export async function decodeAssetZip(
     throw issue('/', 'Could not be read as a zip archive.');
   }
 
-  const { dir, text } = await findManifestEntry(zip);
+  const found = await findNamedTextEntry(zip, 'manifest.json');
+  if (!found) throw issue('/', 'The zip does not contain a manifest.json.');
+  const { dir, text } = found;
 
   let parsed: unknown;
   try {
@@ -221,6 +147,7 @@ export async function decodeAssetZip(
   }
 
   return {
+    assetKind: 'furniture',
     assetId: assignedRootId,
     requestedAssetId,
     name,

@@ -11,6 +11,8 @@ import * as schema from '../db/schema.js';
 import { ApiError } from '../errors.js';
 import type { RequestSchemas } from '../http.js';
 import { authorForLayout, authorsForLayouts } from '../layouts/query.js';
+import type { CharacterFrames } from './decodeCharacter.js';
+import type { PetFrames } from './decodePet.js';
 import type { FlattenedAsset } from './manifest.js';
 import { allCustomAssetCatalog, listCustomAssets } from './query.js';
 import {
@@ -32,6 +34,33 @@ const SCHEMA_VERSION = 1;
 /** The manifest variant a gallery thumbnail should show — front orientation, or the only one there is. */
 function representativeVariant(manifest: FlattenedAsset[]): FlattenedAsset | undefined {
   return manifest.find((entry) => !entry.orientation || entry.orientation === 'front') ?? manifest[0];
+}
+
+/**
+ * The single flat pixel grid a gallery thumbnail can show, whatever shape
+ * `asset.sprites` actually holds for this `assetKind` (#105) — furniture is
+ * already a flat grid per variant; character and pet are frame-array
+ * structures, so the thumbnail is their down-facing first frame.
+ */
+function representativeSpriteGrid(asset: schema.CustomAsset): string[][] | undefined {
+  const manifest = asset.manifest as unknown[];
+  const sprites = asset.sprites as Record<string, unknown>;
+  switch (asset.assetKind) {
+    case 'furniture': {
+      const variant = representativeVariant(manifest as FlattenedAsset[]);
+      return variant ? (sprites[variant.id] as string[][] | undefined) : undefined;
+    }
+    case 'character': {
+      const id = (manifest[0] as { id: string } | undefined)?.id;
+      const frames = id ? (sprites[id] as CharacterFrames | undefined) : undefined;
+      return frames?.down[0];
+    }
+    case 'pet': {
+      const id = (manifest[0] as { id: string } | undefined)?.id;
+      const frames = id ? (sprites[id] as PetFrames | undefined) : undefined;
+      return frames?.idleDown[0] ?? frames?.walkDown[0];
+    }
+  }
 }
 
 export function registerAssetRoutes(app: FastifyInstance, { db }: AssetRoutesDeps): void {
@@ -101,10 +130,7 @@ export function registerAssetRoutes(app: FastifyInstance, { db }: AssetRoutesDep
       const [asset] = await db.select().from(schema.customAssets).where(eq(schema.customAssets.assetId, assetId));
       if (!asset) throw ApiError.notFound(`No custom asset "${assetId}".`);
 
-      const manifest = asset.manifest as FlattenedAsset[];
-      const variant = representativeVariant(manifest);
-      const sprites = asset.sprites as Record<string, string[][]>;
-      const sprite = variant ? sprites[variant.id] : undefined;
+      const sprite = representativeSpriteGrid(asset);
       if (!sprite) throw new ApiError(500, 'internal_error', 'This asset has no sprite data.');
 
       // Content-addressed by nothing but the row's own updatedAt — an asset

@@ -115,6 +115,22 @@ describe('runPin', () => {
     });
   });
 
+  it('forwards a layout-specific customAssets fixture to the renderer (#105)', async () => {
+    const customAssets = [{ kind: 'character' as const, sprites: { down: [], up: [], right: [] } }];
+    const render = vi.fn(async () => PNG);
+    await runPin([{ slug: 'severance-office', layout: validLayout, customAssets }], {
+      source: 'seed/',
+      deps: fakeDeps({ render }),
+    });
+    expect(render).toHaveBeenCalledWith(validLayout, { customAssets });
+  });
+
+  it('calls the renderer with no options at all when a layout carries no customAssets fixture', async () => {
+    const render = vi.fn(async () => PNG);
+    await runPin(layouts, { source: 'seed/', deps: fakeDeps({ render }) });
+    expect(render).toHaveBeenCalledWith(validLayout, undefined);
+  });
+
   it('writes one PNG per rendered layout when asked', async () => {
     const pngDir = tempDir();
     await runPin(layouts, { source: 'seed/', pngDir, deps: fakeDeps({}) });

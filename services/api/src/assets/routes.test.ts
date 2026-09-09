@@ -32,7 +32,7 @@ async function publish(id: string, category = 'chairs') {
   );
   const response = await app.inject({
     method: 'POST',
-    url: `/api/v1/assets?name=${id}&category=${category}`,
+    url: `/api/v1/assets?assetKind=furniture&name=${id}&category=${category}`,
     payload: await simpleAssetZip(id),
     headers: { 'content-type': 'application/zip', authorization: `Bearer ${accessToken}` },
   });

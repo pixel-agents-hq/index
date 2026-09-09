@@ -10,10 +10,17 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { createValidator, type Layout, sha256, upstreamPin } from '@pixel-index/layout-core';
+import {
+  createValidator,
+  type Layout,
+  mergeFurnitureCatalog,
+  sha256,
+  upstreamPin,
+  validateLayout,
+} from '@pixel-index/layout-core';
 
 import { type DevServer, startDevServer } from '../devServer.js';
-import { Renderer, RenderTimeoutError } from '../render.js';
+import { type RenderCustomAsset, Renderer, RenderTimeoutError } from '../render.js';
 import { HarnessInfraError, type HarnessLayout, type LayoutOutcome, type PinRun } from './types.js';
 
 export interface RunPinOptions {
@@ -38,7 +45,7 @@ export interface RunPinDeps {
 
 export interface RendererLike {
   start: () => Promise<void>;
-  render: (layout: Layout) => Promise<Buffer>;
+  render: (layout: Layout, options?: { customAssets?: RenderCustomAsset[] }) => Promise<Buffer>;
   close: () => Promise<void>;
 }
 
@@ -107,7 +114,7 @@ export async function runPin(
     // faster than `concurrency` would only queue inside it and lose the tidy
     // progress reporting.
     for (const item of layouts) {
-      outcomes[item.slug] = await renderOne(renderer, validator, item, pngDir);
+      outcomes[item.slug] = await renderOne(renderer, validator, pin.version, item, pngDir);
       done += 1;
       onProgress?.(done, layouts.length);
     }
@@ -123,19 +130,43 @@ export async function runPin(
   return { pin, source, outcomes, startedAt, finishedAt: new Date().toISOString() };
 }
 
+/** The `catalogEntry`-shaped subset of a fixture's customAssets — the same filter `services/api`'s `furnitureCatalogEntries` applies. */
+function furnitureCatalogEntries(assets: RenderCustomAsset[] | undefined): ({ id: string } & Record<string, unknown>)[] {
+  if (!assets) return [];
+  return assets
+    .filter((asset): asset is Extract<RenderCustomAsset, { kind: 'furniture' }> => asset.kind === 'furniture')
+    .map((asset) => asset.catalogEntry);
+}
+
 async function renderOne(
   renderer: RendererLike,
   validator: ReturnType<typeof createValidator>,
+  upstreamVersion: string | null,
   item: HarnessLayout,
   pngDir: string | undefined,
 ): Promise<LayoutOutcome> {
   // Validate first, exactly as the service does — a layout the index would
   // reject never occupies a render slot, and "unknown furniture id" is a far
   // more useful report line than whatever the browser would have drawn.
-  const { valid, issues } = validator.validateLayout(item.layout);
+  //
+  // #105: a fixture's own custom furniture is not in the pinned catalog by
+  // definition — merge it in first, the same way `services/renderer`'s own
+  // `/render` route does, or every `seed-custom-assets/` furniture fixture
+  // would fail validation as "unknown furniture" before ever reaching a
+  // browser.
+  const customFurniture = furnitureCatalogEntries(item.customAssets);
+  const { valid, issues } =
+    customFurniture.length > 0
+      ? validateLayout(item.layout, {
+          catalog: mergeFurnitureCatalog(validator.catalog, customFurniture),
+          requiredRevision: validator.requiredRevision,
+          upstreamVersion,
+        })
+      : validator.validateLayout(item.layout);
   if (!valid) return { status: 'invalid', issues };
 
-  const attempt = async (): Promise<Buffer> => renderer.render(item.layout as Layout);
+  const attempt = async (): Promise<Buffer> =>
+    renderer.render(item.layout as Layout, item.customAssets ? { customAssets: item.customAssets } : undefined);
 
   let png: Buffer;
   let retried = false;

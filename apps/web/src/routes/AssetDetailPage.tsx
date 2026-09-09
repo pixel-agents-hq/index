@@ -55,8 +55,8 @@ export function AssetDetailPage() {
       <dl className="mt-8 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm text-muted">
         <dt>Asset id</dt>
         <dd className="font-mono text-xs">{asset.assetId}</dd>
-        <dt>Category</dt>
-        <dd>{asset.category}</dd>
+        <dt>{asset.category ? 'Category' : 'Kind'}</dt>
+        <dd>{asset.category ?? asset.assetKind}</dd>
         <dt>Variants</dt>
         <dd>{asset.variantCount}</dd>
         <dt>Last updated</dt>

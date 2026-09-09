@@ -524,6 +524,7 @@ describe('custom furniture (#101)', () => {
   }
 
   const CUSTOM_ASSET = {
+    kind: 'furniture' as const,
     catalogEntry: {
       id: 'RENDERER_TEST_CUSTOM_CHAIR',
       name: 'Test Chair',
@@ -609,6 +610,129 @@ describe('custom furniture (#101)', () => {
         expect(unknownType.json<RenderErrorBody>().issues?.map((issue) => issue.code)).toContain(
           'layout.furniture.unknown',
         );
+      } finally {
+        await app.close();
+      }
+    },
+    RENDER_TIMEOUT,
+  );
+});
+
+describe('custom characters (#105)', () => {
+  /** One solid-colour frame, repeated for every direction/frame slot — content doesn't matter, only that the pipeline accepts and forwards it. */
+  function frames16x32(): string[][][] {
+    const frame = Array.from({ length: 32 }, () => Array.from({ length: 16 }, () => '#00ffff'));
+    return Array.from({ length: 7 }, () => frame);
+  }
+
+  const CUSTOM_CHARACTER = {
+    kind: 'character' as const,
+    sprites: { down: frames16x32(), up: frames16x32(), right: frames16x32() },
+  };
+
+  it(
+    'accepts a custom character without erroring the render',
+    async () => {
+      // Characters are never referenced by a layout's JSON (upstream picks
+      // one positionally, outside the layout — see `customAssets.ts`'s own
+      // doc comment), so there is no "layout that places this character" to
+      // render differently. This proves what IS provable at this boundary:
+      // the `assets/decoded/characters.json` interception runs without
+      // throwing and the render still completes — the same "accepts and
+      // renders, without asserting pixel placement" honesty the furniture
+      // test above states outright.
+      const config = loadConfig();
+      const app = await buildServer({
+        config,
+        renderer: activeRenderer(),
+        cache: new PreviewCache(config.cacheDir, 0),
+      });
+      try {
+        const response = await app.inject({
+          method: 'POST',
+          url: '/render',
+          payload: { layout: readLayout('four-rooms'), customAssets: [CUSTOM_CHARACTER] },
+        });
+        expect(response.statusCode).toBe(200);
+        expect(response.rawPayload.subarray(0, 8)).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+      } finally {
+        await app.close();
+      }
+    },
+    RENDER_TIMEOUT,
+  );
+});
+
+describe('custom pets (#105)', () => {
+  function petFrames16x32(count: number): string[][][] {
+    return Array.from({ length: count }, () => Array.from({ length: 32 }, () => Array.from({ length: 16 }, () => '#ff8800')));
+  }
+  function petFrames32x32(count: number): string[][][] {
+    return Array.from({ length: count }, () => Array.from({ length: 32 }, () => Array.from({ length: 32 }, () => '#ff8800')));
+  }
+
+  const CUSTOM_PET = {
+    kind: 'pet' as const,
+    name: 'Test Pet',
+    frames: {
+      walkDown: petFrames16x32(3),
+      idleDown: petFrames16x32(3),
+      walkUp: petFrames16x32(3),
+      idleUp: petFrames16x32(3),
+      walkRight: petFrames32x32(3),
+    },
+  };
+
+  const PET_LAYOUT = {
+    version: 1,
+    layoutRevision: upstreamPin().layoutRevision,
+    cols: 4,
+    rows: 4,
+    // `TileType.WALL` is 0 — found by actually running this against the real
+    // dev server: a room of nothing but wall tiles has zero walkable tiles,
+    // and `officeState.addPet` silently drops a pet with nowhere to spawn.
+    // Furniture placement doesn't have this requirement (see `CUSTOM_LAYOUT`
+    // above), which is why that fixture gets away with an all-0 room and this
+    // one cannot.
+    tiles: Array(16).fill(1),
+    furniture: [],
+    pets: [{ id: 'renderer-test-pet', petType: 0 }],
+  };
+
+  it(
+    'renders a layout with a custom pet placed, not just an empty room',
+    async () => {
+      // The interesting risk here isn't furniture's or characters' — both
+      // fetch over HTTP, which `page.route()` intercepts normally. Nothing in
+      // this vendored dev-server checkout ever sends `petSpritesLoaded` (no
+      // bundled pet exists to send one for either — see `render.ts`'s own
+      // comment), so the ONLY way a pet — custom or otherwise — renders here
+      // at all is the synthetic postMessage this service dispatches ahead of
+      // `layoutLoaded`. If that timing were wrong (dispatched after, or
+      // never), `getPetCount()` would still be 0 when the layout's pet
+      // roster reconciles and the placed pet would silently never spawn.
+      const config = loadConfig();
+      const app = await buildServer({
+        config,
+        renderer: activeRenderer(),
+        cache: new PreviewCache(config.cacheDir, 0),
+      });
+      try {
+        const [withPet, withoutPet] = await Promise.all([
+          app.inject({
+            method: 'POST',
+            url: '/render',
+            payload: { layout: PET_LAYOUT, customAssets: [CUSTOM_PET] },
+          }),
+          app.inject({ method: 'POST', url: '/render', payload: { layout: { ...PET_LAYOUT, pets: [] } } }),
+        ]);
+        expect(withPet.statusCode).toBe(200);
+        expect(withoutPet.statusCode).toBe(200);
+        // Not a byte-for-byte proof of the pet's own pixels landing on
+        // screen (same fidelity gap the furniture test above documents), but
+        // a pet that never spawned draws the same empty room either way —
+        // this is the one observable difference at this boundary.
+        expect(sha256(withPet.rawPayload)).not.toBe(sha256(withoutPet.rawPayload));
       } finally {
         await app.close();
       }
