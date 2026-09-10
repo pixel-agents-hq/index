@@ -3,9 +3,11 @@
  * (`decode.ts` furniture, `decodeCharacter.ts`, `decodePet.ts`) — extracted
  * from what was originally furniture-only `decode.ts` (#105) so the two new
  * kinds don't each reimplement "find a file in the zip", "decode a PNG
- * strictly", and "suffix a colliding id".
+ * strictly", "suffix a colliding id", and (#107 follow-up) "turn an ajv
+ * schema-validation failure into a 422".
  */
 
+import type { ErrorObject } from 'ajv';
 import type JSZip from 'jszip';
 import { PNG } from 'pngjs';
 
@@ -13,6 +15,32 @@ import { ApiError } from '../errors.js';
 
 export function issue(path: string, message: string): ApiError {
   return ApiError.validation([{ code: 'meta.schema', path, message }], 'Invalid custom asset upload.');
+}
+
+export interface SchemaIssue {
+  path: string;
+  message: string;
+}
+
+/**
+ * Turns ajv's `ErrorObject[]` into the flat `{path, message}` shape a 422
+ * response body reports — shared by `manifest.ts` (furniture) and
+ * `decodePet.ts` (pet), the two manifest kinds now validated against their
+ * published JSON Schema (`packages/layout-core/schema/`, #107) instead of
+ * hand-written checks, so the two can't drift apart again.
+ *
+ * A `required` error's `instancePath` points at the PARENT object, not the
+ * missing field, so this appends `missingProperty` to recover a path that
+ * actually names the field — `/id` rather than `/` for a manifest missing
+ * `id`.
+ */
+export function issuesFromAjvErrors(errors: ErrorObject[] | null | undefined): SchemaIssue[] {
+  return (errors ?? []).map((error) => {
+    const missingProperty =
+      error.keyword === 'required' ? (error.params as { missingProperty?: string }).missingProperty : undefined;
+    const path = missingProperty ? `${error.instancePath}/${missingProperty}` : error.instancePath || '/';
+    return { path, message: `${path} ${error.message ?? 'is invalid'}`.trim() };
+  });
 }
 
 /** Checks a candidate id (and everywhere it appears in a manifest tree) for uniqueness. */

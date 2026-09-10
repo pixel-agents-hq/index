@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/pixel-agents-hq/index/packages/layout-core/schema/custom-asset-pet-manifest.schema.json",
+  "title": "Pixel Index custom pet manifest",
+  "description": "Shape of the manifest.json inside a custom-pet upload zip for POST /api/v1/assets?assetKind=pet (#105). Mirrors services/api/src/assets/decodePet.ts's manifest validation field-for-field: only id and name are checked, and unknown properties are not rejected. See docs/custom-asset-zip-contract.md for the zip-level rules (the <id>/{manifest.json,pet.png} layout, the 96x96 PNG frame grid) this schema doesn't cover.",
+  "type": "object",
+  "required": ["id", "name"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9_]*$",
+      "description": "Uppercase letters, digits, underscore, starting with a letter. This is the requested asset id — pixel-index suffixes it (_2, _3, ...) on collision. Upstream itself drops this field once the pet reaches the client; pixel-index keeps it for GET /api/v1/assets/:assetId."
+    },
+    "name": { "type": "string", "minLength": 1 }
+  }
+}

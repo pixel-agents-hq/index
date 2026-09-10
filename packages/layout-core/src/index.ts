@@ -13,7 +13,13 @@
  */
 
 export { withFormats } from './ajv.js';
-export { layoutSchema, metaSchema, SCHEMA_DIR } from './schemas.js';
+export {
+  customAssetFurnitureManifestSchema,
+  customAssetPetManifestSchema,
+  layoutSchema,
+  metaSchema,
+  SCHEMA_DIR,
+} from './schemas.js';
 export {
   layoutStats,
   type LayoutStatsOptions,

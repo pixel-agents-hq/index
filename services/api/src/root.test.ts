@@ -27,7 +27,7 @@ describe('GET /', () => {
     expect(body.name).toBe('Pixel Index API');
     expect(body.documentation).toBe(`${testConfig().publicApiOrigin}/docs`);
     expect(body.openapi).toBe(`${testConfig().publicApiOrigin}/openapi.json`);
-    expect(body.repository).toBe('https://github.com/pixel-agents-hq/pixel-index');
+    expect(body.repository).toBe('https://github.com/pixel-agents-hq/index');
   });
 
   it('reports no commit when the build did not pass one', async () => {

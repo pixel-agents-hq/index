@@ -89,6 +89,34 @@ describe('GET /api/v1/assets/:assetId/sprite.png', () => {
   });
 });
 
+describe('GET /api/v1/assets/schema/:kind (#107)', () => {
+  it('serves the furniture manifest schema, unauthenticated', async () => {
+    const response = await app.inject({ method: 'GET', url: '/api/v1/assets/schema/furniture' });
+    expect(response.statusCode).toBe(200);
+    const body = response.json<{ $id: string; required: string[] }>();
+    expect(body.$id).toContain('custom-asset-furniture-manifest.schema.json');
+    expect(body.required).toContain('category');
+  });
+
+  it('serves the pet manifest schema, unauthenticated', async () => {
+    const response = await app.inject({ method: 'GET', url: '/api/v1/assets/schema/pet' });
+    expect(response.statusCode).toBe(200);
+    const body = response.json<{ $id: string; required: string[] }>();
+    expect(body.$id).toContain('custom-asset-pet-manifest.schema.json');
+    expect(body.required).toEqual(['id', 'name']);
+  });
+
+  it('404s for character — it has no manifest.json to have a schema for', async () => {
+    const response = await app.inject({ method: 'GET', url: '/api/v1/assets/schema/character' });
+    expect(response.statusCode).toBe(404);
+  });
+
+  it('400s for an unrecognized kind', async () => {
+    const response = await app.inject({ method: 'GET', url: '/api/v1/assets/schema/bogus' });
+    expect(response.statusCode).toBe(400);
+  });
+});
+
 describe('GET /api/v1/assets/catalog', () => {
   it('merges every published asset into one catalog+sprites payload', async () => {
     await publish('CATALOG_ONE');

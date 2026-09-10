@@ -70,4 +70,16 @@ describe('decodePetZip', () => {
     const buffer = await zip.generateAsync({ type: 'nodebuffer' });
     await expect(decodePetZip(buffer, 'Bubbles', noneTaken)).rejects.toMatchObject({ statusCode: 422 });
   });
+
+  it('rejects a pet PNG over 512 KiB, even though it is well under the whole-zip cap (#107)', async () => {
+    // A real 96x96 PNG compresses to well under 512 KiB — pad the raw PNG
+    // buffer itself with trailing bytes (harmless after the IEND chunk) to
+    // push it over the cap without needing an actually-huge image.
+    const zip = new JSZip();
+    zip.file('MY_PET/manifest.json', JSON.stringify({ id: 'MY_PET', name: 'Bubbles' }));
+    const oversizedPng = Buffer.concat([tinyPng(96, 96), Buffer.alloc(513 * 1024)]);
+    zip.file('MY_PET/pet.png', oversizedPng);
+    const buffer = await zip.generateAsync({ type: 'nodebuffer' });
+    await expect(decodePetZip(buffer, 'Bubbles', noneTaken)).rejects.toMatchObject({ statusCode: 422 });
+  });
 });

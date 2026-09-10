@@ -3,6 +3,7 @@
  * `layouts/routes.ts`. No auth anywhere in this file.
  */
 
+import { customAssetFurnitureManifestSchema, customAssetPetManifestSchema } from '@pixel-index/layout-core';
 import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 
@@ -17,6 +18,8 @@ import type { FlattenedAsset } from './manifest.js';
 import { allCustomAssetCatalog, listCustomAssets } from './query.js';
 import {
   assetIdParamsSchema,
+  assetManifestSchemaResponseSchema,
+  assetSchemaKindParamsSchema,
   customAssetCatalogResponseSchema,
   customAssetDetailResponseSchema,
   listCustomAssetsQuerySchema,
@@ -63,6 +66,22 @@ function representativeSpriteGrid(asset: schema.CustomAsset): string[][] | undef
   }
 }
 
+/**
+ * `character` has no manifest.json at all (#105) — nothing to publish a
+ * schema for, so it's `undefined` here and the route 404s with a pointer to
+ * where its PNG-only rule actually lives.
+ */
+function manifestSchemaFor(kind: 'furniture' | 'character' | 'pet'): object | undefined {
+  switch (kind) {
+    case 'furniture':
+      return customAssetFurnitureManifestSchema;
+    case 'pet':
+      return customAssetPetManifestSchema;
+    case 'character':
+      return undefined;
+  }
+}
+
 export function registerAssetRoutes(app: FastifyInstance, { db }: AssetRoutesDeps): void {
   const typed = app.withTypeProvider<RequestSchemas>();
 
@@ -97,6 +116,31 @@ export function registerAssetRoutes(app: FastifyInstance, { db }: AssetRoutesDep
         assets: rows.map((row) => toSummary(row, authors.get(row.authorUserId) ?? null)),
         nextCursor,
       };
+    },
+  );
+
+  // Public, unauthenticated, and live — a consumer generating upload zips
+  // (pixel-art-mcp's contract check, #107) can fetch the manifest contract
+  // straight from a running instance instead of hardcoding a
+  // raw.githubusercontent.com path to this repo out of band. Registered
+  // before `/api/v1/assets/:assetId` in this file, but the extra path
+  // segment already keeps find-my-way from ever treating "schema" as an
+  // `:assetId` value — the same reason `/api/v1/assets/catalog` doesn't
+  // collide with it either.
+  typed.get(
+    '/api/v1/assets/schema/:kind',
+    { schema: { params: assetSchemaKindParamsSchema, response: assetManifestSchemaResponseSchema } },
+    async (request, reply) => {
+      const { kind } = request.params;
+      const manifestSchema = manifestSchemaFor(kind);
+      if (!manifestSchema) {
+        throw ApiError.notFound(
+          `assetKind "${kind}" has no manifest.json, so there is no JSON Schema for it — see ` +
+            'docs/custom-asset-zip-contract.md for its PNG-only rule instead.',
+        );
+      }
+      reply.header('cache-control', 'public, max-age=3600');
+      return manifestSchema;
     },
   );
 

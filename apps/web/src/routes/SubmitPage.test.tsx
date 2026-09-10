@@ -43,7 +43,7 @@ const ROOT_RESPONSE = {
   commit: 'a'.repeat(40),
   documentation: 'http://localhost:3000/docs',
   openapi: 'http://localhost:3000/openapi.json',
-  repository: 'https://github.com/pixel-agents-hq/pixel-index',
+  repository: 'https://github.com/pixel-agents-hq/index',
 };
 
 function stubFetch(

@@ -14,7 +14,7 @@ const ROOT_RESPONSE = {
   commit: 'a'.repeat(40),
   documentation: 'http://localhost:3000/docs',
   openapi: 'http://localhost:3000/openapi.json',
-  repository: 'https://github.com/pixel-agents-hq/pixel-index',
+  repository: 'https://github.com/pixel-agents-hq/index',
 };
 
 const SPEC_RESPONSE = {
@@ -62,11 +62,11 @@ describe('DeveloperPage', () => {
     renderDeveloperPage();
 
     const repoLink = await screen.findByRole('link', { name: /github/i });
-    expect(repoLink).toHaveAttribute('href', 'https://github.com/pixel-agents-hq/pixel-index');
+    expect(repoLink).toHaveAttribute('href', 'https://github.com/pixel-agents-hq/index');
 
     // The commit info card links to the exact commit on GitHub, shortened for display.
     const commitLink = await screen.findByRole('link', { name: ROOT_RESPONSE.commit.slice(0, 7) });
-    expect(commitLink).toHaveAttribute('href', `https://github.com/pixel-agents-hq/pixel-index/commit/${ROOT_RESPONSE.commit}`);
+    expect(commitLink).toHaveAttribute('href', `https://github.com/pixel-agents-hq/index/commit/${ROOT_RESPONSE.commit}`);
 
     // Endpoints from the fetched spec, grouped under a plain read of their own path prefixes.
     expect(await screen.findByText('/api/v1/layouts')).toBeInTheDocument();
