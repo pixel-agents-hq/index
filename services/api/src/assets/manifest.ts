@@ -12,7 +12,19 @@
  * upstream's *shape* at the boundary, never cross it with a module import.
  * Keep this in sync with upstream's `manifestUtils.ts` by hand if that format
  * ever changes.
+ *
+ * `validateManifestShape()` below is the one exception to "hand-written" —
+ * it compiles and runs the published
+ * `custom-asset-furniture-manifest.schema.json` contract (#107) instead of
+ * duplicating its own checks, specifically so this file's actual runtime
+ * enforcement and the schema pixel-art-mcp validates against cannot drift
+ * apart from each other.
  */
+
+import { customAssetFurnitureManifestSchema, withFormats } from '@pixel-index/layout-core';
+import { Ajv2020, type ValidateFunction } from 'ajv/dist/2020.js';
+
+import { issuesFromAjvErrors } from './zip.js';
 
 export interface ManifestAsset {
   type: 'asset';
@@ -160,96 +172,27 @@ export function flattenManifest(node: ManifestNode, inherited: InheritedProps): 
  */
 export const ASSET_ID_RE = /^[A-Z][A-Z0-9_]*$/;
 
-const VALID_CATEGORIES = new Set([
-  'desks',
-  'chairs',
-  'electronics',
-  'storage',
-  'decor',
-  'misc',
-  'wall',
-]);
-
 export interface ManifestIssue {
   path: string;
   message: string;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
+const ajv = withFormats(new Ajv2020({ allErrors: true, strict: false }));
+const validate: ValidateFunction = ajv.compile(customAssetFurnitureManifestSchema);
 
 /**
  * Structural validation only — does this look like a `FurnitureManifest`?
+ * Validates against the published contract
+ * (`packages/layout-core/schema/custom-asset-furniture-manifest.schema.json`,
+ * #107) rather than hand-written checks, so runtime enforcement and the
+ * published schema can't drift apart again the way they had before #107
+ * published the schema without wiring decode to it.
+ *
  * PNG presence/dimensions are checked separately once the zip is unpacked.
  */
 export function validateManifestShape(value: unknown): { manifest: FurnitureManifest } | { issues: ManifestIssue[] } {
-  const issues: ManifestIssue[] = [];
-  if (!isRecord(value)) return { issues: [{ path: '/', message: 'manifest.json must be a JSON object.' }] };
-
-  const id = value.id;
-  if (typeof id !== 'string' || !ASSET_ID_RE.test(id)) {
-    issues.push({
-      path: '/id',
-      message: 'id must start with an uppercase letter and contain only A-Z, 0-9, underscore.',
-    });
+  if (!validate(value)) {
+    return { issues: issuesFromAjvErrors(validate.errors) };
   }
-  if (typeof value.name !== 'string' || value.name.trim() === '') {
-    issues.push({ path: '/name', message: 'name is required.' });
-  }
-  if (typeof value.category !== 'string' || !VALID_CATEGORIES.has(value.category)) {
-    issues.push({
-      path: '/category',
-      message: `category must be one of: ${[...VALID_CATEGORIES].join(', ')}.`,
-    });
-  }
-  if (value.type !== 'asset' && value.type !== 'group') {
-    issues.push({ path: '/type', message: 'type must be "asset" or "group".' });
-  }
-
-  if (value.type === 'asset') {
-    for (const field of ['file', 'width', 'height', 'footprintW', 'footprintH'] as const) {
-      const present = field === 'file' ? typeof value[field] === 'string' : typeof value[field] === 'number';
-      if (!present) issues.push({ path: `/${field}`, message: `${field} is required for an asset manifest.` });
-    }
-  } else if (value.type === 'group') {
-    if (!Array.isArray(value.members) || value.members.length === 0) {
-      issues.push({ path: '/members', message: 'a group manifest needs at least one member.' });
-    } else {
-      for (const [index, member] of value.members.entries()) {
-        const memberIssues = validateNodeShape(member, `/members/${index}`);
-        issues.push(...memberIssues);
-      }
-    }
-  }
-
-  if (issues.length > 0) return { issues };
-  return { manifest: value as unknown as FurnitureManifest };
-}
-
-function validateNodeShape(value: unknown, path: string): ManifestIssue[] {
-  if (!isRecord(value)) return [{ path, message: 'must be an object.' }];
-  const issues: ManifestIssue[] = [];
-  if (value.type !== 'asset' && value.type !== 'group') {
-    issues.push({ path: `${path}/type`, message: 'type must be "asset" or "group".' });
-    return issues;
-  }
-  if (value.type === 'asset') {
-    if (typeof value.id !== 'string' || !ASSET_ID_RE.test(value.id)) {
-      issues.push({ path: `${path}/id`, message: 'invalid or missing id.' });
-    }
-    for (const field of ['file', 'width', 'height', 'footprintW', 'footprintH'] as const) {
-      const present = field === 'file' ? typeof value[field] === 'string' : typeof value[field] === 'number';
-      if (!present) issues.push({ path: `${path}/${field}`, message: `${field} is required.` });
-    }
-  } else {
-    if (!Array.isArray(value.members) || value.members.length === 0) {
-      issues.push({ path: `${path}/members`, message: 'a group needs at least one member.' });
-    } else {
-      for (const [index, member] of value.members.entries()) {
-        issues.push(...validateNodeShape(member, `${path}/members/${index}`));
-      }
-    }
-  }
-  return issues;
+  return { manifest: value as FurnitureManifest };
 }

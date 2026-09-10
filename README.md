@@ -3,9 +3,9 @@
 A community index of [Pixel Agents](https://github.com/pixel-agents-hq/pixel-agents)
 office layouts — browse, download, import.
 
-[![CI](https://github.com/pixel-agents-hq/pixel-index/actions/workflows/ci.yml/badge.svg)](https://github.com/pixel-agents-hq/pixel-index/actions/workflows/ci.yml)
-[![License](https://img.shields.io/github/license/pixel-agents-hq/pixel-index)](LICENSE)
-[![Stars](https://img.shields.io/github/stars/pixel-agents-hq/pixel-index?style=flat)](https://github.com/pixel-agents-hq/pixel-index/stargazers)
+[![CI](https://github.com/pixel-agents-hq/index/actions/workflows/ci.yml/badge.svg)](https://github.com/pixel-agents-hq/index/actions/workflows/ci.yml)
+[![License](https://img.shields.io/github/license/pixel-agents-hq/index)](LICENSE)
+[![Stars](https://img.shields.io/github/stars/pixel-agents-hq/index?style=flat)](https://github.com/pixel-agents-hq/index/stargazers)
 
 🖼️ [Live gallery](https://pixel-index.nntin.xyz) •
 🎮 [Pixel Agents](https://github.com/pixel-agents-hq/pixel-agents) •

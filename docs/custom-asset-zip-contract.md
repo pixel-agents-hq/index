@@ -7,13 +7,14 @@ contract for that shape — everything a tool generating these zips (starting wi
 pixel-index will accept, without reverse-engineering
 `services/api/src/assets/{decode.ts,decodeCharacter.ts,decodePet.ts,manifest.ts}`.
 
-It documents what is already accepted. It does not change the zip format, and it is not
-enforced at runtime by the decode modules above — see
-[#107](https://github.com/pixel-agents-hq/index/issues/107) for why (a runtime rewrite is
-a deliberate later step, not required to publish the contract itself). A test
-(`services/api/src/assets/customAssetContract.test.ts`) validates this repo's own
-fixture builders against the schemas below, so this document and the schemas can't
-silently drift from the decode logic that actually enforces the format.
+It documents what is already accepted, and does not change the zip format. The furniture
+and pet manifest schemas below are also what `manifest.ts`/`decodePet.ts` actually
+compile and run at upload time (via `ajv`) — not a separate hand-written check that could
+drift from the published contract. (Character has no `manifest.json` at all, so there is
+nothing there to wire a schema to — see below.) A test
+(`services/api/src/assets/customAssetContract.test.ts`) additionally validates this
+repo's own fixture builders against the schemas, so a fixture the decode logic genuinely
+accepts can never quietly stop matching what's published here.
 
 ## Pinning: how to consume this contract
 
@@ -49,6 +50,30 @@ would be new process for no more precision than the commit SHA already gives. It
 satisfies pixel-art-mcp#8's stated requirement directly: "pinned to a version/commit
 (not floating)" — a commit SHA is exactly that, and unlike a floating branch reference
 it can never change out from under a consumer that already pinned it.
+
+### Live discovery — `GET /api/v1/assets/schema/{kind}`
+
+A running instance also serves these same two schemas live, unauthenticated (`kind` is
+`furniture` or `pet`; `character` 404s, since it has no manifest to have a schema for):
+
+```text
+GET /api/v1/assets/schema/furniture
+GET /api/v1/assets/schema/pet
+```
+
+The response body **is** the schema document itself — feed it straight to a validator
+(`ajv.compile(await response.json())`) without unwrapping an envelope first. This is
+**for discovery and live drift-checking, not a substitute for pinning**: it always
+serves whatever schema the instance you asked is actually running right now, which for
+staging/production is exactly the point (catching the specific case pinning can't — a
+deploy whose behavior moved but whose committed schema didn't) but is the opposite of a
+pin for anything checked into a consumer's own repo. Use the pinned-commit files above
+for that; use this endpoint to check them against what a real instance is doing.
+
+`/api/v1/assets/schema/:kind` is also automatically part of `GET /openapi.json` (this
+project's OpenAPI spec is generated from the registered Fastify routes), so the schema
+files are one link away from the same spec pixel-art-mcp already reads for the rest of
+this API's shape.
 
 ## Furniture (`assetKind=furniture`)
 
@@ -108,19 +133,21 @@ a `manifest.json` is rejected outright**, not treated as an optional extra.
   - Row 2 (`y = 64..96`): 3 frames × 32 px wide — `walkRight[0..2]`.
   - `walkLeft`/`idleLeft` are not rows — derived at render time by horizontally
     flipping the `right`/... equivalents.
-- **Not enforced by pixel-index, but worth knowing**: upstream's own external-pet loader
-  caps a pet PNG at `MAX_PET_PNG_SIZE = 512 KiB` (`constants.ts`). Pixel-index's own
-  upload path only caps the *whole zip* (`MAX_ASSET_ZIP_BYTES`, 5 MB by default,
-  `services/api/src/config.ts`) — a pet PNG under 5 MB but over 512 KiB would upload
-  successfully here and then fail to load once a user points their own pixel-agents
-  install at it. A generator aiming for genuine end-to-end compatibility, not just a
-  successful upload, should self-limit to 512 KiB per pet PNG.
+- **Enforced by pixel-index**: `decodePetZip` rejects a pet PNG over 512 KiB
+  (`MAX_PET_PNG_BYTES`), mirroring upstream's own external-pet loader's
+  `MAX_PET_PNG_SIZE = 512 KiB` (`constants.ts`) — tighter than, and checked in addition
+  to, the whole-zip `MAX_ASSET_ZIP_BYTES` cap (5 MB by default,
+  `services/api/src/config.ts`). Without this, a pet PNG between 512 KiB and 5 MB would
+  upload successfully here and then fail to load once a user pointed their own
+  pixel-agents install at it — the exact drift this contract exists to catch before
+  upload rather than after.
 
 ## What this contract does not cover
 
 - Cross-field/semantic rules that depend on server state (id collisions, capability
   gating) — those live in `services/api/src/assets/*.ts` and are not expressible in a
   JSON Schema.
-- Runtime validation: pixel-index's own decode modules still enforce this shape with
-  their own imperative checks, not by compiling these schemas. That is a deliberate,
-  separate follow-up (see #107's "explicitly out of scope").
+- Character's PNG-only rule, and every kind's PNG dimension/frame-grid check, are still
+  imperative code (`decodeCharacter.ts`, `decodePet.ts`, `zip.ts`'s `decodePng`), not
+  JSON Schema — JSON Schema has no way to express "decode this referenced binary and
+  check its pixel dimensions."

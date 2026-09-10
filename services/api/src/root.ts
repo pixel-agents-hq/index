@@ -39,6 +39,6 @@ export function registerRootRoutes(app: FastifyInstance, config: ApiConfig): voi
     commit: config.commit ?? null,
     documentation: `${config.publicApiOrigin}/docs`,
     openapi: `${config.publicApiOrigin}/openapi.json`,
-    repository: 'https://github.com/pixel-agents-hq/pixel-index',
+    repository: 'https://github.com/pixel-agents-hq/index',
   }));
 }

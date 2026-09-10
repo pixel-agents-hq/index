@@ -13,13 +13,25 @@
  * `constants.ts`'s pet constants, not an import of it — same boundary rule
  * `decodeCharacter.ts` and `manifest.ts` already follow. Keep this in sync by
  * hand if upstream's pet sprite-sheet layout ever changes.
+ *
+ * The manifest (just `{id, name}`) is validated against the published
+ * `custom-asset-pet-manifest.schema.json` contract (#107) rather than
+ * hand-written checks, the same reasoning `manifest.ts` documents for
+ * furniture. `MAX_PET_PNG_BYTES` mirrors upstream's own
+ * `MAX_PET_PNG_SIZE` (`constants.ts`) — pixel-agents' own external-pet loader
+ * rejects a larger sprite outright, so a zip that uploads successfully here
+ * but exceeds that cap would still fail to load in a real pixel-agents
+ * install; enforcing the same cap here catches that before upload instead of
+ * after (docs/custom-asset-zip-contract.md).
  */
 
+import { customAssetPetManifestSchema, withFormats } from '@pixel-index/layout-core';
+import { Ajv2020, type ValidateFunction } from 'ajv/dist/2020.js';
 import JSZip from 'jszip';
 import { PNG } from 'pngjs';
 
-import { ASSET_ID_RE } from './manifest.js';
-import { findNamedTextEntry, firstFreeId, type IdCollisionChecker, issue, pngPaths } from './zip.js';
+import { ApiError } from '../errors.js';
+import { findNamedTextEntry, firstFreeId, type IdCollisionChecker, issue, issuesFromAjvErrors, pngPaths } from './zip.js';
 
 const PET_FRAME_W_SMALL = 16;
 const PET_FRAME_H = 32;
@@ -28,6 +40,8 @@ export const PET_WIDTH = 96;
 export const PET_HEIGHT = 96;
 const PET_WALK_FRAMES_VERT = 3;
 const PET_IDLE_FRAMES_VERT = 3;
+/** Mirrors upstream's `MAX_PET_PNG_SIZE` (`vendor/pixel-agents/core/src/assets/constants.ts`). */
+const MAX_PET_PNG_BYTES = 512 * 1024;
 const PET_WALK_FRAMES_HORIZ = 3;
 
 export interface PetFrames {
@@ -123,9 +137,8 @@ function decodePetPng(buffer: Buffer, path: string): PetFrames {
   return { walkDown, idleDown, walkUp, idleUp, walkRight };
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
+const ajv = withFormats(new Ajv2020({ allErrors: true, strict: false }));
+const validatePetManifest: ValidateFunction = ajv.compile(customAssetPetManifestSchema);
 
 export async function decodePetZip(
   zipBuffer: Buffer,
@@ -149,15 +162,17 @@ export async function decodePetZip(
   } catch {
     throw issue('/manifest.json', 'manifest.json is not valid JSON.');
   }
-  if (!isRecord(parsed)) throw issue('/manifest.json', 'manifest.json must be a JSON object.');
-  const requestedId = parsed.id;
-  if (typeof requestedId !== 'string' || !ASSET_ID_RE.test(requestedId)) {
-    throw issue('/manifest.json/id', 'id must start with an uppercase letter and contain only A-Z, 0-9, underscore.');
+  if (!validatePetManifest(parsed)) {
+    throw ApiError.validation(
+      issuesFromAjvErrors(validatePetManifest.errors).map((i) => ({
+        code: 'meta.schema' as const,
+        path: i.path,
+        message: i.message,
+      })),
+      'Invalid manifest.json.',
+    );
   }
-  const manifestName = parsed.name;
-  if (typeof manifestName !== 'string' || manifestName.trim() === '') {
-    throw issue('/manifest.json/name', 'name is required.');
-  }
+  const requestedId = (parsed as { id: string }).id;
 
   const pngs = pngPaths(zip, dir);
   if (pngs.length === 0) throw issue('/', `No PNG was found alongside manifest.json in "${dir || '.'}".`);
@@ -168,6 +183,13 @@ export async function decodePetZip(
   if (!entry) throw issue('/', 'The zip does not contain a PNG.');
 
   const buffer = await entry.async('nodebuffer');
+  if (buffer.byteLength > MAX_PET_PNG_BYTES) {
+    throw issue(
+      `/${path}`,
+      `A pet PNG must be at most ${MAX_PET_PNG_BYTES} bytes (${MAX_PET_PNG_BYTES / 1024} KiB) — pixel-agents' own ` +
+        `external-pet loader rejects a larger sprite, got ${buffer.byteLength} bytes.`,
+    );
+  }
   const frames = decodePetPng(buffer, `/${path}`);
 
   const assetId = firstFreeId(requestedId, isIdTaken);

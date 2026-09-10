@@ -79,6 +79,28 @@ export const customAssetDetailResponseSchema = {
   200: { $ref: 'CustomAssetDetail#' },
 } as const;
 
+/**
+ * `character` is a real `assetKind` (#105) but has no `manifest.json` at all
+ * — it's kept in the enum so a request for it 404s with a clear "no schema
+ * for this kind" message instead of a generic 400 for an unrecognized kind.
+ */
+export const assetSchemaKindParamsSchema = {
+  type: 'object',
+  properties: { kind: { type: 'string', enum: ['furniture', 'character', 'pet'] } },
+  required: ['kind'],
+} as const;
+
+/**
+ * The response body IS the published JSON Schema document itself
+ * (`packages/layout-core/schema/custom-asset-*-manifest.schema.json`, #107)
+ * — deliberately not wrapped in an envelope, so a consumer can feed the
+ * response straight to their own schema validator (`ajv.compile(await
+ * response.json())`) without unwrapping it first.
+ */
+export const assetManifestSchemaResponseSchema = {
+  200: { type: 'object', additionalProperties: true },
+} as const;
+
 export const customAssetCatalogResponseSchema = {
   200: {
     type: 'object',
