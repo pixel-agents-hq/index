@@ -32,6 +32,7 @@ COPY apps/web ./apps/web
 # the pinned upstream renderer. Copy only what that build consumes; in
 # particular, do not copy vendor/node_modules from a developer's checkout.
 COPY vendor/pixel-agents.commit ./vendor/pixel-agents.commit
+COPY vendor/pixel-agents/package.json ./vendor/pixel-agents/package.json
 COPY vendor/pixel-agents/core ./vendor/pixel-agents/core
 COPY vendor/pixel-agents/webview-ui/src ./vendor/pixel-agents/webview-ui/src
 COPY vendor/pixel-agents/webview-ui/public ./vendor/pixel-agents/webview-ui/public
