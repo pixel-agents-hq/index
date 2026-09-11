@@ -178,6 +178,32 @@ describe('GET /api/v1/assets/:assetId/sprite.png', () => {
   });
 });
 
+describe('GET /api/v1/assets/:assetId/frames', () => {
+  it('404s for an unknown id', async () => {
+    const response = await app.inject({ method: 'GET', url: '/api/v1/assets/NO_SUCH_ASSET/frames' });
+    expect(response.statusCode).toBe(404);
+  });
+
+  it('gives a flat furniture asset one pose with one frame', async () => {
+    await publish('FRAMES_CHAIR');
+    const response = await app.inject({ method: 'GET', url: '/api/v1/assets/FRAMES_CHAIR/frames' });
+    expect(response.statusCode).toBe(200);
+    const body = response.json<{ poses: { key: string; label: string; frames: string[] }[] }>();
+    expect(body.poses).toHaveLength(1);
+    expect(body.poses[0]?.frames).toHaveLength(1);
+    expect(body.poses[0]?.frames[0]).toMatch(/^data:image\/png;base64,/);
+  });
+
+  it('gives a character asset a walking pose per direction, with a mirrored left', async () => {
+    await publishCharacter('FRAMES_CHARACTER');
+    const response = await app.inject({ method: 'GET', url: '/api/v1/assets/FRAMES_CHARACTER/frames' });
+    expect(response.statusCode).toBe(200);
+    const body = response.json<{ poses: { key: string; mirror?: boolean; frames: string[] }[] }>();
+    expect(body.poses.map((p) => p.key)).toEqual(['down', 'up', 'right', 'left']);
+    expect(body.poses.find((p) => p.key === 'left')?.mirror).toBe(true);
+  });
+});
+
 describe('GET /api/v1/assets/schema/:kind (#107)', () => {
   it('serves the furniture manifest schema, unauthenticated', async () => {
     const response = await app.inject({ method: 'GET', url: '/api/v1/assets/schema/furniture' });

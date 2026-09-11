@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 
 import { apiUrl } from '../api/client';
 import type { AssetSummary } from '../api/types';
+import { AssetPreview } from './AssetPreview';
 import { AuthorLink } from './AuthorLink';
 
 export function AssetCard({ asset }: { asset: AssetSummary }) {
@@ -11,10 +12,11 @@ export function AssetCard({ asset }: { asset: AssetSummary }) {
         to={`/assets/${asset.assetId}`}
         className="block bg-canvas p-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
       >
-        <img
-          src={apiUrl(asset.files.sprite)}
+        <AssetPreview
+          assetId={asset.assetId}
+          fallbackSrc={apiUrl(asset.files.sprite)}
           alt={`${asset.name} sprite`}
-          className="mx-auto max-h-32 [image-rendering:pixelated]"
+          imgClassName="mx-auto max-h-32 [image-rendering:pixelated]"
         />
       </Link>
       <div className="flex flex-1 flex-col gap-2 p-4">

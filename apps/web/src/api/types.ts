@@ -294,6 +294,21 @@ export interface AssetDetail extends AssetSummary {
   manifest: unknown[];
 }
 
+/** One visually distinct variant of an asset — a furniture orientation/state, or a character/pet facing. */
+export interface AssetPose {
+  key: string;
+  label: string;
+  /** Show this pose's frames horizontally mirrored — a "left" pose reusing "right"'s own frames. */
+  mirror?: boolean;
+  /** `data:image/png;base64,...` — always at least one, in playback order. */
+  frames: string[];
+}
+
+export interface AssetFramesResponse {
+  schemaVersion: number;
+  poses: AssetPose[];
+}
+
 export interface ListAssetsResponse {
   schemaVersion: number;
   total: number;
