@@ -3,8 +3,7 @@ import {
   DEFAULT_ASSET_FILTERS,
   isDefaultAssetFilters,
 } from '../routes/assetFilters';
-
-const CATEGORIES = ['desks', 'chairs', 'electronics', 'storage', 'decor', 'misc', 'wall'];
+import { useFurnitureCategories } from '../routes/furnitureCategories';
 
 export function AssetFilterBar({
   filters,
@@ -13,6 +12,7 @@ export function AssetFilterBar({
   filters: AssetFilters;
   onChange: (next: AssetFilters) => void;
 }) {
+  const categories = useFurnitureCategories();
   const selectClass = 'border border-border bg-canvas px-2 py-1.5 text-ink';
 
   return (
@@ -26,7 +26,7 @@ export function AssetFilterBar({
             className={selectClass}
           >
             <option value="">Any</option>
-            {CATEGORIES.map((category) => (
+            {categories.map((category) => (
               <option key={category} value={category}>
                 {category}
               </option>

@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
+import { furnitureCategories } from '@pixel-index/layout-core';
 import type { Plugin, ResolvedConfig } from 'vite';
 
 import { buildFurnitureCatalog } from '../../../vendor/pixel-agents/core/src/assets/build.ts';
@@ -24,6 +25,7 @@ const ASSET_FILENAMES = [
   'carpets.json',
   'furniture-catalog.json',
   'furniture.json',
+  'furniture-categories.json',
   'pets.json',
 ] as const;
 
@@ -60,7 +62,7 @@ function loadPets(assetsDir: string): PetAssets {
   return { pets, names };
 }
 
-function generateAssets(assetsDir: string): GeneratedAssets {
+function generateAssets(assetsDir: string, upstreamRoot: string): GeneratedAssets {
   const catalog = buildFurnitureCatalog(assetsDir);
   const pets = loadPets(assetsDir);
   return {
@@ -70,6 +72,10 @@ function generateAssets(assetsDir: string): GeneratedAssets {
     'carpets.json': JSON.stringify(decodeAllCarpets(assetsDir)),
     'furniture-catalog.json': JSON.stringify(catalog),
     'furniture.json': JSON.stringify(decodeAllFurniture(assetsDir, catalog)),
+    // Same source apps/web's category filter/upload dropdowns need to stay
+    // in sync with — derived from the pinned vendor's real bundled
+    // manifests (@pixel-index/layout-core), not a hand-typed list.
+    'furniture-categories.json': JSON.stringify(furnitureCategories(upstreamRoot)),
     'pets.json': JSON.stringify(pets),
   };
 }
@@ -106,7 +112,7 @@ export function liveOfficeAssets(projectRoot: string): Plugin {
   }
 
   function data(): GeneratedAssets {
-    generated ??= generateAssets(assetsDir);
+    generated ??= generateAssets(assetsDir, upstreamRoot);
     return generated;
   }
 

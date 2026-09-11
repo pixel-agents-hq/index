@@ -39,6 +39,8 @@ const META_RESPONSE = {
   discordInviteUrl: null as string | null,
 };
 
+const FURNITURE_CATEGORIES = ['chairs', 'decor', 'desks', 'electronics', 'misc', 'wall'];
+
 function stubFetch(handleOther: (url: string) => Response, authResponse: unknown = AUTH_RESPONSE) {
   vi.stubGlobal(
     'fetch',
@@ -46,6 +48,7 @@ function stubFetch(handleOther: (url: string) => Response, authResponse: unknown
       const url = requestUrl(input);
       if (url.includes('/auth/token')) return Response.json(authResponse);
       if (url.includes('/meta')) return Response.json(META_RESPONSE);
+      if (url.includes('furniture-categories.json')) return Response.json(FURNITURE_CATEGORIES);
       return handleOther(url);
     }),
   );
@@ -102,7 +105,8 @@ describe('AssetSubmitPage', () => {
     chooseFile();
     expect(screen.getByRole('button', { name: 'Publish' })).toBeDisabled(); // still no name
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'My Chair' } });
-    expect(screen.getByRole('button', { name: 'Publish' })).toBeEnabled();
+    // Category seeds asynchronously once furniture-categories.json resolves.
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Publish' })).toBeEnabled());
   });
 
   it('publishes and navigates to the new asset on success', async () => {
@@ -124,6 +128,7 @@ describe('AssetSubmitPage', () => {
 
     chooseFile();
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'My Chair' } });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Publish' })).toBeEnabled());
     fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
 
     await waitFor(() => expect(screen.getByText('landed on asset detail page')).toBeInTheDocument());
@@ -145,6 +150,7 @@ describe('AssetSubmitPage', () => {
 
     chooseFile();
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'My Chair' } });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Publish' })).toBeEnabled());
     fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
 
     expect(await screen.findByText(/id must start with an uppercase letter\./, { exact: false })).toBeInTheDocument();
