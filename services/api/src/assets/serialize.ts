@@ -9,6 +9,8 @@ export interface PublicCustomAssetSummary {
   name: string;
   /** Furniture only (#105) — null for characters and pets. */
   category: string | null;
+  /** `'builtin'` for the bundled Pixel Agents catalog synced by `builtinSync.ts`, `'custom'` for an upload. */
+  source: schema.CustomAsset['source'];
   author: PublicAuthor;
   variantCount: number;
   createdAt: string;
@@ -43,6 +45,7 @@ export function toSummary(asset: schema.CustomAsset, author: schema.User | null)
     assetKind: asset.assetKind,
     name: asset.name,
     category: asset.category,
+    source: asset.source,
     author: assetAuthor(author),
     variantCount: (asset.manifest as unknown[]).length,
     createdAt: asset.createdAt.toISOString(),
