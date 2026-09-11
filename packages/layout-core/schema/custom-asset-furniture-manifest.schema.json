@@ -60,8 +60,8 @@
     "name": { "type": "string", "minLength": 1 },
     "category": {
       "type": "string",
-      "enum": ["desks", "chairs", "electronics", "storage", "decor", "misc", "wall"],
-      "description": "Pixel-agents' current 7-value category set, kept as-is for upstream parity (#105) — storage included even though no bundled manifest uses it today."
+      "enum": ["chairs", "decor", "desks", "electronics", "misc", "wall"],
+      "description": "Generated from the categories the pinned vendor's bundled furniture manifests actually use (currently: chairs, decor, desks, electronics, misc, wall) — not a fixed list. Run `npm run furniture-categories:schema` to regenerate after a vendor bump."
     },
     "canPlaceOnWalls": { "type": "boolean" },
     "canPlaceOnSurfaces": { "type": "boolean" },

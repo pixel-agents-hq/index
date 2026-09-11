@@ -35,6 +35,13 @@ jobs:
       - name: The vendor commit stamp matches the submodule pin
         run: npm run vendor:commit:check
 
+      # The published furniture manifest schema's category enum is generated
+      # from the pinned vendor's real bundled manifests (tools/generate-
+      # furniture-categories-schema.mjs), not hand-typed — this is what
+      # stops it from silently drifting after a vendor bump.
+      - name: The furniture category enum matches the pinned vendor manifests
+        run: npm run furniture-categories:schema:check
+
       # Builds @pixel-index/layout-core, then runs its CLI over seed/.
       - name: Validate the seed layouts against the pinned Pixel Agents
         run: npm run validate
