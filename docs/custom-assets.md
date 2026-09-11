@@ -226,6 +226,7 @@ for both origins) the owner asked for, while still treating the vendor pin, not 
 git-committed copy, as the only source of truth for what a "current" built-in asset is.
 
 **Schema (`custom_assets`, new migration):**
+
 - `source: 'builtin' | 'custom'` (new enum column, not null). Every row existing today
   backfills to `'custom'`.
 - `sourceCommit: text, nullable` — the `vendor/pixel-agents.commit` SHA a `'builtin'`
@@ -246,6 +247,7 @@ git-committed copy, as the only source of truth for what a "current" built-in as
   unchanged.
 
 **Reconciliation step, not a request-time decode:**
+
 - New module, e.g. `services/api/src/assets/builtinSync.ts`, invoked once at boot —
   wired into `docker-entrypoint.sh` as a new idempotent step, the same shape
   migrations/backfills/seeding already are there ("all steps are idempotent, so
@@ -280,6 +282,7 @@ git-committed copy, as the only source of truth for what a "current" built-in as
   this feature.
 
 **API and UI:**
+
 - `GET /api/v1/assets`, `/assets/:id`, `/assets/:id/sprite.png` need no new routes —
   they already read `custom_assets`; the only change is that rows can now have
   `source: 'builtin'`, surfaced in `toSummary()`/`toDetail()` (`serialize.ts`) and the
@@ -294,6 +297,7 @@ git-committed copy, as the only source of truth for what a "current" built-in as
   &lt;version&gt;" notice instead of a user link.
 
 **Still open for implementation to settle (small, not architecture-level):**
+
 1. Exact synthesized id scheme for built-in characters (no upstream id today) and
    whether pet ids get upper-cased for storage while keeping their original casing in
    `name`/display.
