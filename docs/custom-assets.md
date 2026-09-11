@@ -4,18 +4,22 @@ Pixel Index lets the community — and an automated "animator agent" on the Disc
 side — publish custom furniture, character, and pet assets, not just office layouts,
 through a self-service API. This document is the design record for that feature
 (#101, #105, #107/#108): the architecture as decided, what actually shipped in this
-repo, and where it diverges from the original plan. It also opens the next piece of
-work: showing the *bundled* (built-in) Pixel Agents catalog in the same gallery — see
+repo, and where it diverges from the original plan. It also records a follow-up piece
+of work that has since landed: showing the *bundled* (built-in) Pixel Agents catalog in
+the same gallery — see
 [Extending the gallery to built-in assets](#extending-the-gallery-to-built-in-assets)
-below, which is an investigation with options, not yet decided.
+below.
 
 ## Status
 
 **Complete in this repo** (`pixel-index`): upload API, moderator-issued API-key auth,
 server-side decode pipeline, browser-client merge, renderer integration, the
-`/assets/` gallery, and the producer-side JSON Schema contract. Landed across three
-PRs: #104 ("stage 1" — storage + web upload), #106 (#105 — characters and pets,
-polymorphic `custom_assets`), #108 (#107 — published JSON Schema contract).
+`/assets/` gallery, the producer-side JSON Schema contract, and syncing the built-in
+Pixel Agents catalog into the same gallery. Landed across four PRs: the storage/web-
+upload "stage 1" (#104), characters and pets with a polymorphic `custom_assets` (#106,
+for #105), the published JSON Schema contract (#108, for #107), and the built-in-asset
+sync PR (see [Extending the gallery to built-in
+assets](#extending-the-gallery-to-built-in-assets)).
 
 **Not in this repo, tracked separately**: the `animator` cog's `publish_pixel_agents_asset`
 native tool and the generalized "requesting user" A2A context plumbing (section E below)
@@ -197,7 +201,10 @@ same shape as the layout detail page's own `?from=`.
 
 ## Extending the gallery to built-in assets
 
-**Decided — this is the second goal, not yet implemented.**
+**Decided and implemented.** `services/api/src/assets/builtinSync.ts`,
+`services/api/src/db/sync-builtin-assets.ts`, the `query.ts`/`serialize.ts`/
+`schemas.ts`/`routes.ts` scoping fixes, and the `apps/web` gallery/detail
+changes below all landed together.
 
 Today, `/assets/` (`AssetsGallery.tsx`) only lists rows from `custom_assets` via
 `GET /api/v1/assets` — every asset a human or the animator has uploaded. It shows
@@ -246,11 +253,17 @@ git-committed copy, as the only source of truth for what a "current" built-in as
   reconciliation idempotent: a sync run compares the current pin against what's
   already stored and can no-op when nothing changed, instead of re-decoding on every
   boot.
-- `authorUserId` stays `NOT NULL` (unchanged) — built-in rows point at a seeded system
-  user (e.g. a stub row keyed by a reserved id, no Discord profile), reusing the
-  **already-accepted "ghost user" pattern** (decision #8) rather than loosening the
-  column's own constraint. The gallery/detail UI shows `source = 'builtin'` (see below)
-  instead of ever rendering that system user as if they were a real author.
+- `authorUserId` stays `NOT NULL` (unchanged) — built-in rows point at a **second
+  reserved system user** (migration `0016_pixel_agents_system_user.sql`, username
+  `pixel-agents`, `discordId: null`), not the existing ghost-user mechanism
+  (`resolveOrCreateGhostUser`) decision #8 introduced: a ghost user always carries a
+  *real* Discord snowflake, just one not yet fetched — the wrong shape for an asset
+  with no associated Discord user at all. It's also kept distinct from the seed-layout
+  system user (`SYSTEM_USER_ID`, username `pixel-index`): `GET /api/v1/assets` is a
+  public API that always populates `author.username`, so reusing the seed owner would
+  make every built-in asset's API response claim "authored by pixel-index" — wrong
+  provenance. The gallery/detail UI shows `source = 'builtin'` (see below) instead of
+  ever rendering that system user as if they were a real contributor.
 - `custom_assets_asset_id_format`'s `^[A-Z][A-Z0-9_]*$` check needs the built-in pet
   ids (`gitcat`, `claudio` — lowercase in the vendor tree) upper-cased on the way in
   (`GITCAT`, `CLAUDIO`); furniture and a synthesized character id scheme
@@ -277,16 +290,15 @@ git-committed copy, as the only source of truth for what a "current" built-in as
   guarantee.
 - **Decode reuse, not a second decoder**: `decode.ts`/`decodeCharacter.ts`/`decodePet.ts`
   already implement the exact hand-kept manifest/PNG decode logic this needs — they
-  just currently take a `JSZip` built from an *uploaded* zip. `builtinSync.ts` builds
-  an in-memory `JSZip` from the vendor tree's on-disk files
-  (`assets/furniture/<ID>/{manifest.json,*.png}`, `assets/characters/char_N.png`,
-  `assets/pets/<id>/{manifest.json,pet.png}`) and feeds it through those same
-  functions unmodified — so a built-in asset is validated and decoded by **exactly**
-  the same code path an upload goes through, not a parallel one that could drift.
-  (A lighter alternative — swap `JSZip` for a small `path -> Buffer` reader interface
-  those three modules accept instead — is worth considering during implementation if
-  building a throwaway in-memory zip turns out to be awkward; either way, no logic is
-  duplicated.)
+  take a zip `Buffer` and parse it themselves (`JSZip.loadAsync` internally), not a
+  `JSZip` instance. `builtinSync.ts` builds an in-memory `JSZip` from the vendor tree's
+  on-disk files (`assets/furniture/<ID>/{manifest.json,*.png}`,
+  `assets/characters/char_N.png`, `assets/pets/<id>/{manifest.json,pet.png}`),
+  serializes it back to a `Buffer` (`generateAsync({type:'nodebuffer'})`), and feeds
+  that through those same functions unmodified — a required two-hop round trip given
+  their actual signatures, not a shortcut — so a built-in asset is validated and
+  decoded by **exactly** the same code path an upload goes through, not a parallel one
+  that could drift.
 - Auto-suffix collision checking (`firstFreeId()` against `knownFurnitureIds()`, the
   local vendor checkout) becomes partially redundant once built-ins are DB rows too —
   the DB itself could answer "is this id taken" for both origins in one place. Not
@@ -295,28 +307,36 @@ git-committed copy, as the only source of truth for what a "current" built-in as
 
 **API and UI:**
 
-- `GET /api/v1/assets`, `/assets/:id`, `/assets/:id/sprite.png` need no new routes —
-  they already read `custom_assets`; the only change is that rows can now have
-  `source: 'builtin'`, surfaced in `toSummary()`/`toDetail()` (`serialize.ts`) and the
-  response schemas.
-- **Confirmed: same grid, interleaved** — `AssetsGallery.tsx`'s existing list gets a
-  visible tag per card (e.g. a "Built-in" vs. "Community" badge on `AssetCard.tsx`)
-  and `AssetFilterBar.tsx` gains a source filter alongside its existing category
-  filter.
-- **Confirmed: full detail page** — `AssetDetailPage.tsx` handles `source: 'builtin'`
-  the same shape as a custom asset (preview, manifest metadata, "open in editor"),
-  with the author section replaced by a "Built-in — bundled with Pixel Agents
-  &lt;version&gt;" notice instead of a user link.
+- `GET /api/v1/assets`, `/assets/:id`, `/assets/:id/sprite.png` needed no new routes —
+  they already read `custom_assets`; rows can now have `source: 'builtin'`, surfaced in
+  `toSummary()`/`toDetail()` (`serialize.ts`) and the response schemas.
+  `allCustomAssetCatalog()`/`customAssetsOfKind()` (`query.ts`) — the two functions
+  feeding the browser catalog merge and the renderer's character/pet injection — are
+  scoped to `source = 'custom'` only, since both consumers already independently draw
+  every built-in asset from elsewhere (the browser's own build-time bundle; the
+  renderer's dev-server-hosted, unmodified webview-ui); without that scoping, every
+  built-in asset would render twice.
+- **Same grid, interleaved** — `AssetsGallery.tsx`'s list shows a "Built-in" badge on
+  `AssetCard.tsx` only for `source: 'builtin'` (its absence is the "community" signal),
+  and `AssetFilterBar.tsx` gained a Source filter (Any/Built-in/Community) alongside
+  its existing Category one.
+- **Full detail page** — `AssetDetailPage.tsx` handles `source: 'builtin'` the same
+  shape as a custom asset (preview, manifest metadata, "open in editor"), with the
+  author line replaced by a plain "Built-in — bundled with Pixel Agents" notice instead
+  of a user link. No Pixel Agents version number in the notice — `sourceCommit` is an
+  internal reconciliation key, not exposed publicly, and adding a version field just
+  for one sentence of copy wasn't judged worth new API surface.
 
-**Still open for implementation to settle (small, not architecture-level):**
+Resolved during implementation:
 
-1. Exact synthesized id scheme for built-in characters (no upstream id today) and
-   whether pet ids get upper-cased for storage while keeping their original casing in
-   `name`/display.
-2. Whether `builtinSync.ts` runs as its own `docker-entrypoint.sh` step (matching
-   migrate/backfill/seed) or inside `server.ts` before the app starts listening —
-   leaning toward the entrypoint step for consistency with every other idempotent boot
-   task, but worth confirming once the migration shape is drafted.
+1. Character ids: `builtinSync.ts` calls `decodeCharacterZip` with `name: 'Char ${n}'`
+   for `n` in `0..5` — its existing name-slugifying id derivation already turns that
+   into `CHAR_0`..`CHAR_5` with no new id logic needed. Pet ids: a *synthetic* manifest
+   (`{id: vendorId.toUpperCase(), name: vendorName}`) is fed to `decodePetZip` rather
+   than the vendor file's bytes verbatim, so `gitcat`/`claudio` become `GITCAT`/`CLAUDIO`
+   while `name` keeps its original casing for display.
+2. `sync-builtin-assets.ts` runs as its own `docker-entrypoint.sh` step, after
+   `seed.js` — consistent with every other idempotent boot task there.
 
 ## See also
 
