@@ -126,7 +126,7 @@ flowchart TB
     DB -- "GET custom catalog JSON + raw PNGs" --> Renderer
     Renderer -- "page.route() intercepts\nfurniture-catalog.json + PNG fetches" --> Render2["office preview (server-rendered PNG)"]
 
-    DB -- "list/detail, both sources" --> Gallery
+    DB -- "list/detail/frames\n(poses for animated,\nvariant-switchable previews),\nboth sources" --> Gallery
     Gallery -- "'Open in editor'\n(same shape as /layouts/:slug's ?from=)" --> BrowserClient
 ```
 
@@ -136,7 +136,13 @@ flowchart TB
 this repo, see below. `Vendor`, `BuiltinSync`, and the edges into/out of them are new,
 added here for the built-in-asset gallery design decided in
 [Extending the gallery to built-in assets](#extending-the-gallery-to-built-in-assets)
-below — not part of #101 itself.)*
+below — not part of #101 itself. The `DB --> Gallery` edge's `frames` leg is newer
+still: `GET /api/v1/assets/:assetId/sprite.png` always existed, but
+`GET /api/v1/assets/:assetId/frames` — grouping a decoded asset's sprites into
+per-orientation/state/direction "poses", each with its own animation frames — and the
+`AssetPreview` component that animates and lets a visitor switch between them, were
+added after this document's own design work, to actually animate the built-in and
+custom catalogs' previews rather than showing one static PNG per asset.)*
 
 ## As built, in this repo
 
