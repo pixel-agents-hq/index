@@ -6,7 +6,7 @@ import { PIXEL_AGENTS_SYSTEM_USER_ID } from '../db/constants.js';
 import * as schema from '../db/schema.js';
 import { createTestDatabase, type Harness } from '../db/test-support/harness.js';
 import { buildServer } from '../server.js';
-import { simpleAssetZip } from '../test-support/assetZip.js';
+import { characterZip, simpleAssetZip } from '../test-support/assetZip.js';
 import { testConfig } from '../test-support/config.js';
 import { insertUser } from '../test-support/layouts.js';
 import type { PublicCustomAssetDetail } from './serialize.js';
@@ -36,6 +36,22 @@ async function publish(id: string, category = 'chairs') {
     method: 'POST',
     url: `/api/v1/assets?assetKind=furniture&name=${id}&category=${category}`,
     payload: await simpleAssetZip(id),
+    headers: { 'content-type': 'application/zip', authorization: `Bearer ${accessToken}` },
+  });
+  return response.json<PublicCustomAssetDetail>();
+}
+
+async function publishCharacter(name: string) {
+  const user = await insertUser(harness.db, { username: `author-of-${name}` });
+  const accessToken = await signAccessToken(
+    { sub: user.id, role: user.role },
+    config.sessionSecret,
+    config.accessTokenTtlMs,
+  );
+  const response = await app.inject({
+    method: 'POST',
+    url: `/api/v1/assets?assetKind=character&name=${name}`,
+    payload: await characterZip(),
     headers: { 'content-type': 'application/zip', authorization: `Bearer ${accessToken}` },
   });
   return response.json<PublicCustomAssetDetail>();
@@ -117,6 +133,17 @@ describe('GET /api/v1/assets', () => {
     const bothBody = both.json<{ assets: { assetId: string }[] }>();
     expect(bothBody.assets.some((a) => a.assetId === 'SOURCE_FILTER_BUILTIN')).toBe(true);
     expect(bothBody.assets.some((a) => a.assetId === 'SOURCE_FILTER_CUSTOM')).toBe(true);
+  });
+
+  it('filters by assetKind, so a gallery can narrow to just characters or pets', async () => {
+    await publish('KIND_FILTER_CHAIR');
+    await publishCharacter('KIND_FILTER_CHARACTER');
+
+    const response = await app.inject({ method: 'GET', url: '/api/v1/assets?assetKind=character&limit=100' });
+    const body = response.json<{ assets: { assetId: string; assetKind: string }[] }>();
+    expect(body.assets.every((a) => a.assetKind === 'character')).toBe(true);
+    expect(body.assets.some((a) => a.assetId === 'KIND_FILTER_CHARACTER')).toBe(true);
+    expect(body.assets.some((a) => a.assetId === 'KIND_FILTER_CHAIR')).toBe(false);
   });
 
   it('400s for an unrecognized source', async () => {

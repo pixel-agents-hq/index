@@ -141,6 +141,34 @@ describe('AssetsGallery', () => {
     expect(lastUrl).toContain('source=builtin');
   });
 
+  it('re-fetches from scratch when the kind filter changes', async () => {
+    let lastUrl = '';
+    stubAssetsFetch((url) => {
+      lastUrl = url;
+      const wantsPets = url.includes('assetKind=pet');
+      return Response.json({
+        schemaVersion: 1,
+        total: 1,
+        assets: [
+          summary(
+            wantsPets
+              ? { assetId: 'MY_PET', name: 'My Pet', category: null, assetKind: 'pet' }
+              : {},
+          ),
+        ],
+        nextCursor: null,
+      });
+    });
+    renderGallery();
+    await screen.findByText('My Chair');
+
+    fireEvent.change(screen.getByLabelText('Kind'), { target: { value: 'pet' } });
+
+    expect(await screen.findByText('My Pet')).toBeInTheDocument();
+    expect(screen.queryByText('My Chair')).not.toBeInTheDocument();
+    expect(lastUrl).toContain('assetKind=pet');
+  });
+
   it('loads the next page via "Load more" and appends', async () => {
     stubAssetsFetch((url) => {
       if (url.includes('cursor=page2')) {

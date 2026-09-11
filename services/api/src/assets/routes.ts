@@ -104,6 +104,7 @@ export function registerAssetRoutes(app: FastifyInstance, { db }: AssetRoutesDep
         limit: query.limit,
         ...(query.cursor ? { cursor: query.cursor } : {}),
         filters: {
+          ...(query.assetKind ? { assetKind: query.assetKind } : {}),
           ...(query.category ? { category: query.category } : {}),
           ...(query.source ? { source: query.source } : {}),
           ...(author ? { author } : {}),

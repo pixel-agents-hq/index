@@ -19,6 +19,22 @@ export function AssetFilterBar({
     <div className="mb-6 flex flex-col gap-4 border-2 border-border bg-surface p-4">
       <div className="flex flex-wrap items-center gap-3">
         <label className="flex items-center gap-1.5 text-sm text-muted">
+          Kind
+          <select
+            value={filters.assetKind ?? ''}
+            onChange={(event) =>
+              onChange({ ...filters, assetKind: (event.target.value || null) as AssetFilters['assetKind'] })
+            }
+            className={selectClass}
+          >
+            <option value="">Any</option>
+            <option value="furniture">Furniture</option>
+            <option value="character">Character</option>
+            <option value="pet">Pet</option>
+          </select>
+        </label>
+
+        <label className="flex items-center gap-1.5 text-sm text-muted">
           Category
           <select
             value={filters.category ?? ''}

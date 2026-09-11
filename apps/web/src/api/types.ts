@@ -304,6 +304,7 @@ export interface ListAssetsResponse {
 export interface ListAssetsParams {
   limit?: number;
   cursor?: string;
+  assetKind?: 'furniture' | 'character' | 'pet';
   category?: string;
   source?: 'builtin' | 'custom';
   /** A Discord user id (snowflake), same convention as ListLayoutsParams.author. */
