@@ -184,6 +184,28 @@ jobs:
       - name: Run the e2e suite
         run: npm run test:e2e --workspace @pixel-index/api
 
+  web-docker-build:
+    name: Web Docker image builds
+    runs-on: ubuntu-latest
+    # `test` above already proves `npm run build --workspace @pixel-index/web`
+    # assembles — it does NOT prove `apps/web/Dockerfile`'s own COPY list
+    # actually supplies everything that build needs, since the Dockerfile
+    # builds inside a clean container with its own explicit, hand-picked file
+    # list (self-hosting only, #17 — the official index deploys via GitHub
+    # Pages instead, see pages.yml). That gap is exactly how a missing `COPY
+    # vendor/pixel-agents/package.json` line (needed by `assertUpstream()`,
+    # `packages/layout-core/src/upstream.ts`, once `liveOfficeAssets.ts`
+    # started calling `furnitureCategories()`) shipped broken and was only
+    # caught by hand later: `api-e2e` below builds the real `services/api`
+    # and `services/renderer` images every run, but nothing built this one.
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Build the web Docker image
+        run: docker build -f apps/web/Dockerfile --build-arg VITE_API_BASE_URL=https://api.example.com .
+
   renderer:
     name: Renderer integration tests
     runs-on: ubuntu-latest
