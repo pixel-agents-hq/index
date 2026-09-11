@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   bundledLayoutRevision,
   furnitureCatalog,
+  furnitureCategories,
   knownFurnitureIds,
   mergeFurnitureCatalog,
   upstreamCommitFile,
@@ -56,6 +57,34 @@ describe('furnitureCatalog', () => {
 
   it('knownFurnitureIds agrees with the catalog', () => {
     expect(knownFurnitureIds()).toEqual(new Set(catalog.keys()));
+  });
+});
+
+describe('furnitureCategories', () => {
+  const catalog = furnitureCatalog();
+  const categories = furnitureCategories();
+
+  it('returns the distinct categories the pinned upstream\'s bundled furniture actually uses', () => {
+    // Confirmed against the currently pinned commit by direct inspection of
+    // every furniture/*/manifest.json: 6 of upstream's 7 declared palette
+    // categories are used by a real bundled asset today.
+    expect(categories).toEqual(['chairs', 'decor', 'desks', 'electronics', 'misc', 'wall']);
+  });
+
+  it('does not include a category no bundled manifest actually uses (deliberate — not upstream\'s full declared palette)', () => {
+    // Upstream's webview-ui palette reserves a 7th category, 'storage', that
+    // no shipped asset uses — furnitureCategories() reflects real usage, not
+    // the UI's declared-but-partly-unused list, so it must not appear here.
+    expect(categories).not.toContain('storage');
+  });
+
+  it('agrees with furnitureCatalog\'s own category values', () => {
+    const fromCatalog = new Set([...catalog.values()].map((entry) => entry.category).filter(Boolean));
+    expect(new Set(categories)).toEqual(fromCatalog);
+  });
+
+  it('is sorted', () => {
+    expect(categories).toEqual([...categories].sort());
   });
 });
 

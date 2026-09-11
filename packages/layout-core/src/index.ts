@@ -44,6 +44,7 @@ export {
   assertUpstream,
   bundledLayoutRevision,
   furnitureCatalog,
+  furnitureCategories,
   knownFurnitureIds,
   mergeFurnitureCatalog,
   readJsonOrNull,
