@@ -32,7 +32,7 @@ import type { AnyDatabase } from '../db/client.js';
 import { PIXEL_AGENTS_SYSTEM_USER_ID } from '../db/constants.js';
 import * as schema from '../db/schema.js';
 import { type DecodedFurnitureAsset, decodeFurnitureZip } from './decode.js';
-import { type DecodedCharacterAsset, decodeCharacterZip } from './decodeCharacter.js';
+import { decodeCharacterZip,type DecodedCharacterAsset } from './decodeCharacter.js';
 import { type DecodedPetAsset, decodePetZip } from './decodePet.js';
 import type { IdCollisionChecker } from './zip.js';
 

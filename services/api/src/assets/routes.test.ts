@@ -2,9 +2,9 @@ import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { signAccessToken } from '../auth/tokens.js';
-import { createTestDatabase, type Harness } from '../db/test-support/harness.js';
 import { PIXEL_AGENTS_SYSTEM_USER_ID } from '../db/constants.js';
 import * as schema from '../db/schema.js';
+import { createTestDatabase, type Harness } from '../db/test-support/harness.js';
 import { buildServer } from '../server.js';
 import { simpleAssetZip } from '../test-support/assetZip.js';
 import { testConfig } from '../test-support/config.js';
