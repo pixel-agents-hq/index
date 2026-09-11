@@ -116,6 +116,34 @@ export const assetManifestSchemaResponseSchema = {
   200: { type: 'object', additionalProperties: true },
 } as const;
 
+/**
+ * The response body for `/frames` — one entry per visually distinct pose
+ * (`poses.ts`'s `AssetPose[]`), each carrying its own frames as embedded PNG
+ * data URLs so the client never has to make a second round trip per frame.
+ */
+export const assetFramesResponseSchema = {
+  200: {
+    type: 'object',
+    properties: {
+      schemaVersion: { type: 'integer' },
+      poses: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            key: { type: 'string' },
+            label: { type: 'string' },
+            mirror: { type: 'boolean' },
+            frames: { type: 'array', items: { type: 'string' } },
+          },
+          required: ['key', 'label', 'frames'],
+        },
+      },
+    },
+    required: ['schemaVersion', 'poses'],
+  },
+} as const;
+
 export const customAssetCatalogResponseSchema = {
   200: {
     type: 'object',

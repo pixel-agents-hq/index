@@ -10,6 +10,7 @@ import type { OpenApiDocument } from './openapi';
 import type {
   ApiInfo,
   AssetDetail,
+  AssetFramesResponse,
   LayoutDetail,
   ListAssetsParams,
   ListAssetsResponse,
@@ -180,6 +181,11 @@ export function listAssets(params: ListAssetsParams = {}, signal?: AbortSignal):
 
 export function getAsset(assetId: string, signal?: AbortSignal): Promise<AssetDetail> {
   return apiRequest(`/api/v1/assets/${encodeURIComponent(assetId)}`, { signal });
+}
+
+/** Every pose this asset can be shown in, each with its own frames embedded as PNG data URLs (AssetPreview's data source). */
+export function getAssetFrames(assetId: string, signal?: AbortSignal): Promise<AssetFramesResponse> {
+  return apiRequest(`/api/v1/assets/${encodeURIComponent(assetId)}/frames`, { signal });
 }
 
 /** Exact uploaded layout.json text; callers may format it for presentation. */

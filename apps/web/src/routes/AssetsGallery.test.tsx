@@ -38,6 +38,11 @@ function stubAssetsFetch(handle: (url: string) => Response) {
     vi.fn(async (input: RequestInfo | URL) => {
       const url = requestUrl(input);
       if (url.includes('furniture-categories.json')) return Response.json(FURNITURE_CATEGORIES);
+      // Every rendered AssetCard fires its own AssetPreview request for
+      // animation frames — stubbed to "no poses" so cards fall back to their
+      // static sprite, and kept out of `handle()` so it never shadows the
+      // list request a test is actually asserting against.
+      if (url.includes('/frames')) return Response.json({ schemaVersion: 1, poses: [] });
       return handle(url);
     }),
   );

@@ -2,6 +2,7 @@ import { Link, useParams } from 'react-router-dom';
 
 import { apiUrl, getAsset } from '../api/client';
 import { useApi } from '../api/useApi';
+import { AssetPreview } from '../components/AssetPreview';
 import { AuthorLink } from '../components/AuthorLink';
 import { ErrorNotice } from '../components/ErrorNotice';
 
@@ -52,10 +53,12 @@ export function AssetDetailPage() {
       </p>
 
       <div className="mt-4 inline-block border-2 border-border bg-canvas p-4">
-        <img
-          src={apiUrl(asset.files.sprite)}
+        <AssetPreview
+          assetId={asset.assetId}
+          fallbackSrc={apiUrl(asset.files.sprite)}
           alt={`${asset.name} sprite`}
-          className="mx-auto max-h-48 [image-rendering:pixelated]"
+          imgClassName="mx-auto max-h-48 [image-rendering:pixelated]"
+          showVariantPicker
         />
       </div>
 

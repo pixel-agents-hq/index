@@ -15,8 +15,10 @@ import { authorForLayout, authorsForLayouts } from '../layouts/query.js';
 import type { CharacterFrames } from './decodeCharacter.js';
 import type { PetFrames } from './decodePet.js';
 import type { FlattenedAsset } from './manifest.js';
+import { buildAssetPoses } from './poses.js';
 import { allCustomAssetCatalog, listCustomAssets } from './query.js';
 import {
+  assetFramesResponseSchema,
   assetIdParamsSchema,
   assetManifestSchemaResponseSchema,
   assetSchemaKindParamsSchema,
@@ -185,6 +187,25 @@ export function registerAssetRoutes(app: FastifyInstance, { db }: AssetRoutesDep
       // route, never treated as immutable.
       reply.header('cache-control', 'public, max-age=60, must-revalidate');
       return reply.header('content-type', 'image/png').send(encodeSpritePng(sprite));
+    },
+  );
+
+  /**
+   * Every pose this asset can be shown in — furniture's orientations/states,
+   * a character's or pet's walking directions — each with its own frames
+   * embedded as PNG data URLs, so a preview can animate and let visitors
+   * switch variants without a request per frame.
+   */
+  typed.get(
+    '/api/v1/assets/:assetId/frames',
+    { schema: { params: assetIdParamsSchema, response: assetFramesResponseSchema } },
+    async (request, reply) => {
+      const { assetId } = request.params;
+      const [asset] = await db.select().from(schema.customAssets).where(eq(schema.customAssets.assetId, assetId));
+      if (!asset) throw ApiError.notFound(`No custom asset "${assetId}".`);
+
+      reply.header('cache-control', 'public, max-age=60, must-revalidate');
+      return { schemaVersion: SCHEMA_VERSION, poses: buildAssetPoses(asset) };
     },
   );
 }
