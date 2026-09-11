@@ -106,6 +106,14 @@ export const auditTargetType = pgEnum('audit_target_type', ['layout', 'user', 'r
 export const assetKindEnum = pgEnum('asset_kind', ['furniture', 'character', 'pet']);
 
 /**
+ * `builtin` rows are synced from the pinned `vendor/pixel-agents` webview
+ * assets by `assets/builtinSync.ts`, not uploaded through `POST
+ * /api/v1/assets` — `custom` is every row that endpoint has ever written.
+ * Every row that existed before this column was added backfills to `custom`.
+ */
+export const assetSourceEnum = pgEnum('asset_source', ['builtin', 'custom']);
+
+/**
  * Everything privileged that can happen, including owner actions — #9 requires
  * owner edits in the same log as moderator ones, so a layout's history is
  * reconstructable from this table alone.
@@ -367,6 +375,12 @@ export const layoutTags = pgTable(
  * No `visibility` column: #101 explicitly decided there is no moderator
  * pre-publish review and no hide/delete flow for a first version — add one
  * later if asked for, rather than carrying dead states now.
+ *
+ * Also holds the bundled Pixel Agents catalog (`source: 'builtin'`), synced
+ * in by `assets/builtinSync.ts` at boot — see that file and
+ * `docs/custom-assets.md`'s "Extending the gallery to built-in assets"
+ * section. One table for both origins, not two, so `GET /api/v1/assets`
+ * lists/filters/paginates across them uniformly.
  */
 export const customAssets = pgTable(
   'custom_assets',
@@ -412,6 +426,16 @@ export const customAssets = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: 'restrict' }),
 
+    /** See `assetSourceEnum`'s doc comment. */
+    source: assetSourceEnum('source').notNull(),
+    /**
+     * The `vendor/pixel-agents.commit` SHA a `source: 'builtin'` row was
+     * decoded from; always null for `source: 'custom'`. `builtinSync.ts`
+     * compares this against the currently pinned commit to decide whether a
+     * resync is needed at all, instead of re-decoding on every boot.
+     */
+    sourceCommit: text('source_commit'),
+
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -427,10 +451,19 @@ export const customAssets = pgTable(
       'custom_assets_category_by_kind',
       sql`(${table.assetKind} = 'furniture' AND ${table.category} IS NOT NULL) OR (${table.assetKind} <> 'furniture' AND ${table.category} IS NULL)`,
     ),
+    // Same reasoning as custom_assets_category_by_kind: a builtin row is
+    // meaningless without knowing which pin it came from, and a custom row
+    // must never carry one — it would look like a stale builtin to
+    // builtinSync.ts's no-op check otherwise.
+    check(
+      'custom_assets_source_commit_by_source',
+      sql`(${table.source} = 'builtin' AND ${table.sourceCommit} IS NOT NULL) OR (${table.source} = 'custom' AND ${table.sourceCommit} IS NULL)`,
+    ),
     index('custom_assets_author_idx').on(table.authorUserId),
     index('custom_assets_public_created_idx').on(table.createdAt.desc(), table.id.desc()),
     index('custom_assets_category_idx').on(table.category),
     index('custom_assets_kind_idx').on(table.assetKind),
+    index('custom_assets_source_idx').on(table.source),
   ],
 );
 

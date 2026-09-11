@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { SYSTEM_USER_ID } from './constants.js';
+import { PIXEL_AGENTS_SYSTEM_USER_ID, SYSTEM_USER_ID } from './constants.js';
 import * as schema from './schema.js';
 import { createTestDatabase, type Harness, migrateAgain, tableNames } from './test-support/harness.js';
 
@@ -36,7 +36,7 @@ describe('migrations', () => {
     expect(await tableNames(harness.client)).toContain('layouts');
 
     const users = await harness.db.select().from(schema.users);
-    expect(users).toHaveLength(2); // the system user plus the bundled-layout author
+    expect(users).toHaveLength(3); // the two system users (0002, 0016) plus the bundled-layout author
   });
 
   it('creates the synthetic seed owner', async () => {
@@ -48,6 +48,17 @@ describe('migrations', () => {
     expect(systemUser?.isSystem).toBe(true);
     // Nothing can ever authenticate as it.
     expect(systemUser?.discordId).toBeNull();
+  });
+
+  it('creates the synthetic built-in-asset author', async () => {
+    const [pixelAgentsUser] = await harness.db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.id, PIXEL_AGENTS_SYSTEM_USER_ID));
+
+    expect(pixelAgentsUser?.isSystem).toBe(true);
+    expect(pixelAgentsUser?.discordId).toBeNull();
+    expect(pixelAgentsUser?.username).toBe('pixel-agents');
   });
 
   it('creates or reuses the Discord-backed bundled-layout author', async () => {
