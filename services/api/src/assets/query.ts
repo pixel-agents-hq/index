@@ -9,6 +9,7 @@ import { type Cursor, decodeCursor, encodeCursor } from '../layouts/cursor.js';
 export interface ListCustomAssetsFilters {
   assetKind?: schema.CustomAsset['assetKind'];
   category?: string;
+  source?: schema.CustomAsset['source'];
   /** users.id — resolved from a Discord id by the caller, same convention as layouts. */
   author?: string;
 }
@@ -32,6 +33,7 @@ function buildConditions(filters: ListCustomAssetsFilters) {
   const conditions = [];
   if (filters.assetKind) conditions.push(eq(schema.customAssets.assetKind, filters.assetKind));
   if (filters.category) conditions.push(eq(schema.customAssets.category, filters.category));
+  if (filters.source) conditions.push(eq(schema.customAssets.source, filters.source));
   if (filters.author) conditions.push(eq(schema.customAssets.authorUserId, filters.author));
   return conditions;
 }
@@ -95,6 +97,13 @@ export async function existingCustomAssetIds(db: AnyDatabase): Promise<Set<strin
  * catalog by `apps/web`'s `live-office/assets.ts`). Scoped to furniture only
  * (#105): a character or pet manifest entry has none of `CatalogEntry`'s
  * shape and must never be merged into the furniture catalog.
+ *
+ * Also scoped to `source: 'custom'` — `apps/web`'s build-time static bundle
+ * (`apps/web/build/liveOfficeAssets.ts`) already independently decodes every
+ * *built-in* furniture item from the same pinned vendor tree, so a builtin
+ * `custom_assets` row (synced by `builtinSync.ts`) must never be merged in
+ * here too, or every built-in furniture item would appear twice in the
+ * palette.
  */
 export async function allCustomAssetCatalog(
   db: AnyDatabase,
@@ -102,7 +111,7 @@ export async function allCustomAssetCatalog(
   const rows = await db
     .select()
     .from(schema.customAssets)
-    .where(eq(schema.customAssets.assetKind, 'furniture'));
+    .where(and(eq(schema.customAssets.assetKind, 'furniture'), eq(schema.customAssets.source, 'custom')));
   const catalog: unknown[] = [];
   const sprites: Record<string, string[][]> = {};
   for (const row of rows) {
@@ -112,10 +121,22 @@ export async function allCustomAssetCatalog(
   return { catalog, sprites };
 }
 
-/** Every published custom asset of one non-furniture kind — the renderer packaging boundary reads this directly (#105). */
+/**
+ * Every published custom asset of one non-furniture kind — the renderer
+ * packaging boundary reads this directly (#105).
+ *
+ * Scoped to `source: 'custom'` — `services/renderer` boots the pinned
+ * upstream's own unmodified webview-ui, which already draws every *built-in*
+ * character/pet natively; a builtin `custom_assets` row (synced by
+ * `builtinSync.ts`) must never be injected on top of that too, or every
+ * built-in character/pet would be double-drawn on every render.
+ */
 export async function customAssetsOfKind(
   db: AnyDatabase,
   assetKind: 'character' | 'pet',
 ): Promise<schema.CustomAsset[]> {
-  return db.select().from(schema.customAssets).where(eq(schema.customAssets.assetKind, assetKind));
+  return db
+    .select()
+    .from(schema.customAssets)
+    .where(and(eq(schema.customAssets.assetKind, assetKind), eq(schema.customAssets.source, 'custom')));
 }

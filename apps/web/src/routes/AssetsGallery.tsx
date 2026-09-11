@@ -72,7 +72,7 @@ export function AssetsGallery() {
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="font-display text-2xl text-ink">Custom assets</h1>
+        <h1 className="font-display text-2xl text-ink">Assets</h1>
         <Link to="/assets/submit" className="border-2 border-accent px-3 py-1.5 text-sm text-accent">
           Upload an asset
         </Link>

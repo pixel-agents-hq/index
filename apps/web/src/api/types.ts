@@ -280,6 +280,8 @@ export interface AssetSummary {
   assetKind: 'furniture' | 'character' | 'pet';
   name: string;
   category: string | null;
+  /** `'builtin'` for the catalog bundled with Pixel Agents itself, `'custom'` for a community upload. */
+  source: 'builtin' | 'custom';
   author: PublicAuthor;
   variantCount: number;
   createdAt: string;
@@ -303,6 +305,7 @@ export interface ListAssetsParams {
   limit?: number;
   cursor?: string;
   category?: string;
+  source?: 'builtin' | 'custom';
   /** A Discord user id (snowflake), same convention as ListLayoutsParams.author. */
   author?: string;
 }

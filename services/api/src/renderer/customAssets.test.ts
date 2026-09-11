@@ -32,6 +32,7 @@ async function insertFurniture(harness: Harness, assetId: string) {
     sprites: { [assetId]: Array.from({ length: 16 }, () => Array.from({ length: 16 }, () => '#ff00ff')) },
     rawZip: Buffer.from('fake zip'),
     authorUserId: user.id,
+    source: 'custom',
   });
 }
 
@@ -60,6 +61,31 @@ async function insertCharacter(harness: Harness, assetId: string) {
     },
     rawZip: Buffer.from('fake zip'),
     authorUserId: user.id,
+    source: 'custom',
+  });
+}
+
+/** A row shaped like `builtinSync.ts` would write, for the exclusion test below. */
+async function insertBuiltinCharacter(harness: Harness, assetId: string) {
+  const user = await insertUser(harness.db, { username: `builtin-author-of-${assetId}` });
+  await harness.db.insert(schema.customAssets).values({
+    assetKind: 'character',
+    assetId,
+    requestedAssetId: assetId,
+    name: assetId,
+    category: null,
+    manifest: [{ id: assetId, name: assetId, label: assetId, width: 112, height: 96 }],
+    sprites: {
+      [assetId]: {
+        down: [grid16(), grid16(), grid16(), grid16(), grid16(), grid16(), grid16()],
+        up: [grid16(), grid16(), grid16(), grid16(), grid16(), grid16(), grid16()],
+        right: [grid16(), grid16(), grid16(), grid16(), grid16(), grid16(), grid16()],
+      },
+    },
+    rawZip: Buffer.from('fake zip'),
+    authorUserId: user.id,
+    source: 'builtin',
+    sourceCommit: '0'.repeat(40),
   });
 }
 
@@ -83,6 +109,7 @@ async function insertPet(harness: Harness, assetId: string, name: string) {
     },
     rawZip: Buffer.from('fake zip'),
     authorUserId: user.id,
+    source: 'custom',
   });
 }
 
@@ -176,6 +203,17 @@ describe('customAssetsForLayout', () => {
       if (asset?.kind !== 'pet') throw new Error('expected a pet asset');
       expect(asset.name).toBe('Bubbles');
       expect(asset.frames.walkRight).toHaveLength(3);
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('excludes a builtin character — the dev-server-hosted webview already draws it natively (#101 follow-up)', async () => {
+    const harness = await createTestDatabase();
+    try {
+      await insertBuiltinCharacter(harness, 'BUILTIN_CHARACTER_EXCLUDED');
+      const result = await customAssetsForLayout(harness.db, { furniture: [] });
+      expect(result).toEqual([]);
     } finally {
       await harness.close();
     }

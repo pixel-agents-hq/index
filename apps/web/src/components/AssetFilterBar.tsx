@@ -33,6 +33,21 @@ export function AssetFilterBar({
             ))}
           </select>
         </label>
+
+        <label className="flex items-center gap-1.5 text-sm text-muted">
+          Source
+          <select
+            value={filters.source ?? ''}
+            onChange={(event) =>
+              onChange({ ...filters, source: (event.target.value || null) as AssetFilters['source'] })
+            }
+            className={selectClass}
+          >
+            <option value="">Any</option>
+            <option value="builtin">Built-in</option>
+            <option value="custom">Community</option>
+          </select>
+        </label>
       </div>
 
       {filters.author && (

@@ -20,6 +20,7 @@ function summary(overrides: Record<string, unknown> = {}) {
     assetId: 'MY_CHAIR',
     name: 'My Chair',
     category: 'chairs',
+    source: 'custom',
     author: { discordId: null, username: 'someone', displayName: 'someone', avatarUrl: null },
     variantCount: 1,
     createdAt: '2026-01-01T00:00:00.000Z',
@@ -80,6 +81,54 @@ describe('AssetsGallery', () => {
     expect(await screen.findByText('My Lamp')).toBeInTheDocument();
     expect(screen.queryByText('My Chair')).not.toBeInTheDocument();
     expect(lastUrl).toContain('category=decor');
+  });
+
+  it('shows a "Built-in" badge on a builtin asset and none on a community one', async () => {
+    stubAssetsFetch(() =>
+      Response.json({
+        schemaVersion: 1,
+        total: 2,
+        assets: [
+          summary({ assetId: 'BUILTIN_CHAIR', name: 'Builtin Chair', source: 'builtin' }),
+          summary({ assetId: 'MY_CHAIR', name: 'My Chair', source: 'custom' }),
+        ],
+        nextCursor: null,
+      }),
+    );
+    renderGallery();
+
+    await screen.findByText('Builtin Chair');
+    // Scoped to a <span>, not the filter bar's own "Built-in" <option> text.
+    expect(screen.getByText('Built-in', { selector: 'span' })).toBeInTheDocument();
+    expect(screen.queryAllByText('Built-in', { selector: 'span' })).toHaveLength(1);
+  });
+
+  it('re-fetches from scratch when the source filter changes', async () => {
+    let lastUrl = '';
+    stubAssetsFetch((url) => {
+      lastUrl = url;
+      const wantsBuiltin = url.includes('source=builtin');
+      return Response.json({
+        schemaVersion: 1,
+        total: 1,
+        assets: [
+          summary(
+            wantsBuiltin
+              ? { assetId: 'BUILTIN_CHAIR', name: 'Builtin Chair', source: 'builtin' }
+              : {},
+          ),
+        ],
+        nextCursor: null,
+      });
+    });
+    renderGallery();
+    await screen.findByText('My Chair');
+
+    fireEvent.change(screen.getByLabelText('Source'), { target: { value: 'builtin' } });
+
+    expect(await screen.findByText('Builtin Chair')).toBeInTheDocument();
+    expect(screen.queryByText('My Chair')).not.toBeInTheDocument();
+    expect(lastUrl).toContain('source=builtin');
   });
 
   it('loads the next page via "Load more" and appends', async () => {

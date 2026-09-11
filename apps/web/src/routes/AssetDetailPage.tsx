@@ -28,7 +28,14 @@ export function AssetDetailPage() {
     <article>
       <h1 className="font-display text-2xl text-ink">{asset.name}</h1>
       <p className="mt-1 text-muted">
-        by <AuthorLink author={asset.author} /> · published {dateFormatter.format(new Date(asset.createdAt))}
+        {asset.source === 'builtin' ? (
+          <>Built-in — bundled with Pixel Agents</>
+        ) : (
+          <>
+            by <AuthorLink author={asset.author} />
+          </>
+        )}{' '}
+        · published {dateFormatter.format(new Date(asset.createdAt))}
       </p>
 
       {/*

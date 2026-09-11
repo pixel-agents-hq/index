@@ -11,6 +11,7 @@ function detail(overrides: Record<string, unknown> = {}) {
     assetId: 'MY_CHAIR',
     name: 'My Chair',
     category: 'chairs',
+    source: 'custom',
     author: { discordId: null, username: 'someone', displayName: 'someone', avatarUrl: null },
     variantCount: 1,
     createdAt: '2026-01-01T00:00:00.000Z',
@@ -41,6 +42,14 @@ describe('AssetDetailPage', () => {
     expect(screen.getByRole('link', { name: 'Open in editor' })).toHaveAttribute('href', '/editor');
     expect(screen.getByText('MY_CHAIR')).toBeInTheDocument();
     expect(screen.getByText('chairs')).toBeInTheDocument();
+  });
+
+  it('shows a "Built-in" notice instead of an author link for a builtin asset', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json(detail({ source: 'builtin' }))));
+    renderDetail();
+
+    expect(await screen.findByText('Built-in — bundled with Pixel Agents', { exact: false })).toBeInTheDocument();
+    expect(screen.queryByText('by someone', { exact: false })).not.toBeInTheDocument();
   });
 
   it('shows an error notice for a 404', async () => {

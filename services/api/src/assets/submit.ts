@@ -164,6 +164,7 @@ export function registerAssetSubmitRoutes(app: FastifyInstance, { config, db }: 
                   sprites: decoded.sprites,
                   rawZip: zipBuffer,
                   authorUserId: user.id,
+                  source: 'custom',
                 })
                 .returning(),
             );

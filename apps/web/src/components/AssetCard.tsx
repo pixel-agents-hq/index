@@ -23,6 +23,12 @@ export function AssetCard({ asset }: { asset: AssetSummary }) {
             {asset.name}
           </Link>
         </h2>
+        {/* Absence of the badge is itself the "community" signal — no badge for source: 'custom'. */}
+        {asset.source === 'builtin' && (
+          <span className="w-fit border border-border px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-subtle">
+            Built-in
+          </span>
+        )}
         <p className="m-0 text-sm text-muted">
           by <AuthorLink author={asset.author} />
         </p>

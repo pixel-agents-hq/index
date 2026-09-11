@@ -15,13 +15,26 @@ export const customAssetSummarySchema = {
     name: { type: 'string' },
     // Furniture only (#105) — null for characters and pets.
     category: { type: ['string', 'null'] },
+    // 'builtin' for the bundled Pixel Agents catalog (synced by builtinSync.ts), 'custom' for an upload.
+    source: { type: 'string', enum: ['builtin', 'custom'] },
     author: { $ref: 'PublicAuthor#' },
     variantCount: { type: 'integer' },
     createdAt: { type: 'string', format: 'date-time' },
     updatedAt: { type: 'string', format: 'date-time' },
     files: filesSchema,
   },
-  required: ['assetId', 'assetKind', 'name', 'category', 'author', 'variantCount', 'createdAt', 'updatedAt', 'files'],
+  required: [
+    'assetId',
+    'assetKind',
+    'name',
+    'category',
+    'source',
+    'author',
+    'variantCount',
+    'createdAt',
+    'updatedAt',
+    'files',
+  ],
 } as const;
 
 export const customAssetDetailSchema = {
@@ -51,6 +64,8 @@ export const listCustomAssetsQuerySchema = {
     cursor: { type: 'string' },
     assetKind: { type: 'string', enum: ['furniture', 'character', 'pet'] },
     category: { type: 'string' },
+    // 'builtin' for the bundled Pixel Agents catalog, 'custom' for an upload.
+    source: { type: 'string', enum: ['builtin', 'custom'] },
     // A Discord user id (snowflake), same convention as /api/v1/layouts?author=.
     author: { type: 'string' },
   },
