@@ -8,7 +8,12 @@
  * producer/consumer drift #107 exists to catch before pixel-art-mcp does.
  */
 
-import { customAssetFurnitureManifestSchema, customAssetPetManifestSchema, withFormats } from '@pixel-index/layout-core';
+import {
+  customAssetFurnitureManifestSchema,
+  customAssetPetManifestSchema,
+  furnitureCategories,
+  withFormats,
+} from '@pixel-index/layout-core';
 import { Ajv2020, type ValidateFunction } from 'ajv/dist/2020.js';
 import JSZip from 'jszip';
 import { PNG } from 'pngjs';
@@ -88,6 +93,18 @@ describe('custom-asset-furniture-manifest.schema.json', () => {
       footprintH: 1,
     };
     expect(validateFurnitureManifest(manifest)).toBe(false);
+  });
+
+  it("category enum matches furnitureCategories() — catches a hand-edited-but-not-regenerated schema file", () => {
+    // The committed schema is generated (tools/generate-furniture-categories-
+    // schema.mjs) from the pinned vendor's real bundled manifests. This is
+    // the defense-in-depth half of that guarantee: CI's `--check` step
+    // catches drift at push time; this catches it any time `npm test` runs,
+    // including locally before a commit.
+    const schema = customAssetFurnitureManifestSchema as {
+      properties: { category: { enum: string[] } };
+    };
+    expect(schema.properties.category.enum).toEqual(furnitureCategories());
   });
 });
 

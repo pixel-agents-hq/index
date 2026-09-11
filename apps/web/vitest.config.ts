@@ -9,6 +9,10 @@ export default defineConfig({
   // if both sides of it are exercised.
   define: {
     __VENDOR_PREVIEW__: 'globalThis.__VENDOR_PREVIEW__',
+    // A fixed placeholder — no real vendor checkout under vitest, and tests
+    // that reach this (loadFurnitureCategories() et al.) only care that it's
+    // a stable, well-formed commit-shaped string, not the real pin.
+    __PIXEL_AGENTS_COMMIT__: JSON.stringify('0'.repeat(40)),
   },
   test: {
     environment: 'jsdom',

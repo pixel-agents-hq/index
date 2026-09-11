@@ -19,7 +19,7 @@
  * custody of the key itself, not a per-call check (see #101's discussion).
  */
 
-import { knownFurnitureIds } from '@pixel-index/layout-core';
+import { furnitureCategories, knownFurnitureIds } from '@pixel-index/layout-core';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { FromSchema } from 'json-schema-to-ts';
 
@@ -40,7 +40,7 @@ import type { DecodedCharacterAsset } from './decodeCharacter.js';
 import { decodeCharacterZip } from './decodeCharacter.js';
 import { type DecodedPetAsset, decodePetZip } from './decodePet.js';
 import { existingCustomAssetIds } from './query.js';
-import { submitCustomAssetQuerySchema } from './schemas.js';
+import { buildSubmitCustomAssetQuerySchema } from './schemas.js';
 import { toDetail } from './serialize.js';
 import type { IdCollisionChecker } from './zip.js';
 
@@ -112,6 +112,25 @@ async function resolveUploader(
 }
 
 export function registerAssetSubmitRoutes(app: FastifyInstance, { config, db }: AssetSubmitRoutesDeps): void {
+  // Built once per app instance, not per request — config.upstreamDir isn't
+  // known at module load time, but the category set itself is static for
+  // the process's lifetime.
+  //
+  // Same degrade-rather-than-crash contract as /api/v1/meta's own
+  // upstreamPin() read (meta.ts): an unreadable/missing upstream must not
+  // take down route registration for the whole app. An empty category list
+  // falls back to an unconstrained string (buildSubmitCustomAssetQuerySchema
+  // below) rather than an empty enum, which ajv rejects outright as an
+  // invalid schema.
+  let categories: string[];
+  try {
+    categories = furnitureCategories(config.upstreamDir);
+  } catch (error) {
+    app.log.warn({ err: error }, 'could not read the pinned upstream for the furniture category enum');
+    categories = [];
+  }
+  const submitCustomAssetQuerySchema = buildSubmitCustomAssetQuerySchema(categories);
+
   // eslint-disable-next-line @typescript-eslint/require-await
   app.register(async (instance) => {
     // Scoped to this route only, same reasoning as layouts/submit.ts's

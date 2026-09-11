@@ -15,8 +15,16 @@ COPY package.json package-lock.json ./
 # Beside the manifests rather than with the source below: it changes about as
 # often as they do, and the layer caching should reflect that.
 COPY tsconfig.strict.json ./
+COPY packages/layout-core/package.json ./packages/layout-core/
 COPY apps/web/package.json ./apps/web/
-RUN npm ci --workspace @pixel-index/web --include-workspace-root
+RUN npm ci --workspace @pixel-index/layout-core --workspace @pixel-index/web --include-workspace-root
+
+# The web build's own build/liveOfficeAssets.ts imports @pixel-index/layout-core
+# (furnitureCategories()) — like every other workspace that depends on it, this
+# has to be built first, since `import` resolves package.json's "main"
+# (dist/index.js), not source.
+COPY packages/layout-core ./packages/layout-core
+RUN npm run build --workspace @pixel-index/layout-core
 
 COPY apps/web ./apps/web
 
@@ -24,6 +32,7 @@ COPY apps/web ./apps/web
 # the pinned upstream renderer. Copy only what that build consumes; in
 # particular, do not copy vendor/node_modules from a developer's checkout.
 COPY vendor/pixel-agents.commit ./vendor/pixel-agents.commit
+COPY vendor/pixel-agents/package.json ./vendor/pixel-agents/package.json
 COPY vendor/pixel-agents/core ./vendor/pixel-agents/core
 COPY vendor/pixel-agents/webview-ui/src ./vendor/pixel-agents/webview-ui/src
 COPY vendor/pixel-agents/webview-ui/public ./vendor/pixel-agents/webview-ui/public

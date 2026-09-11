@@ -36,6 +36,12 @@ jobs:
       - name: Install index tooling
         run: npm ci
 
+      # apps/web/build/liveOfficeAssets.ts imports @pixel-index/layout-core
+      # (furnitureCategories()) — has to be built first, since `import`
+      # resolves package.json's "main" (dist/index.js), not source.
+      - name: Build layout-core
+        run: npm run build:core
+
       - name: Build the SPA
         working-directory: apps/web
         env:

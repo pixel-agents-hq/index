@@ -190,6 +190,21 @@ describe('POST /api/v1/assets — assetKind (#105)', () => {
     );
     expect(response.statusCode).toBe(400);
   });
+
+  it('rejects a category no bundled vendor manifest actually uses (#101 follow-up)', async () => {
+    // The accepted category set is generated from furnitureCategories(),
+    // derived from the pinned vendor's real bundled manifests — 'storage'
+    // is declared in upstream's UI palette but unused by any shipped asset,
+    // so it must not validate here even though it used to (back when this
+    // enum was a hand-typed 7-value list).
+    const { accessToken } = await tokenFor({ username: 'storage-category-uploader' });
+    const response = await submit(
+      'assetKind=furniture&name=Shelf&category=storage',
+      await simpleAssetZip('STORAGE_SHELF'),
+      { authorization: `Bearer ${accessToken}` },
+    );
+    expect(response.statusCode).toBe(400);
+  });
 });
 
 describe('POST /api/v1/assets — X-Api-Key (bot-originated) uploads', () => {
@@ -247,5 +262,36 @@ describe('POST /api/v1/assets — X-Api-Key (bot-originated) uploads', () => {
     );
     expect(first.json<PublicCustomAssetDetail>().author.discordId).toBe('555555555555555555');
     expect(second.json<PublicCustomAssetDetail>().author.discordId).toBe('555555555555555555');
+  });
+});
+
+describe('POST /api/v1/assets — category enum with an unreadable upstream (#101 follow-up)', () => {
+  it('boots the server rather than crashing route registration, and does not 400 an arbitrary category', async () => {
+    // The category enum is generated from furnitureCategories(config.upstreamDir)
+    // at route-registration time — an entirely missing upstream must degrade
+    // (empty/unconstrained category, same "degrade rather than crash" contract
+    // /api/v1/meta's own upstreamPin() read already has), not take down server
+    // boot for every other route too.
+    const brokenConfig = testConfig({
+      writeRateLimit: { max: 1000, windowMs: 60_000 },
+      upstreamDir: '/nonexistent/pixel-agents',
+    });
+    const brokenApp = await buildServer({ config: brokenConfig, pool: fakePool, db: harness.db });
+    try {
+      const { accessToken } = await tokenFor({ username: 'broken-upstream-uploader' });
+      const response = await brokenApp.inject({
+        method: 'POST',
+        url: '/api/v1/assets?assetKind=furniture&name=Chair&category=anything-at-all',
+        payload: await simpleAssetZip('BROKEN_UPSTREAM_CHAIR'),
+        headers: { 'content-type': 'application/zip', authorization: `Bearer ${accessToken}` },
+      });
+      // Not a 400 — the schema itself must not reject the category. (It may
+      // still fail later, e.g. a 500 from decode's own separate upstream
+      // read — that's a pre-existing, unrelated limitation, not what this
+      // test covers.)
+      expect(response.statusCode).not.toBe(400);
+    } finally {
+      await brokenApp.close();
+    }
   });
 });

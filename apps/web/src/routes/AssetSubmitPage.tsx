@@ -5,8 +5,7 @@ import { ApiError } from '../api/client';
 import { submitAsset } from '../api/manageClient';
 import { useAuth } from '../auth/authState';
 import { SubmissionGate } from '../components/SubmissionGate';
-
-const CATEGORIES = ['desks', 'chairs', 'electronics', 'storage', 'decor', 'misc', 'wall'];
+import { useFurnitureCategories } from './furnitureCategories';
 
 /**
  * Upload + server-side validation only (#101) — no pre-publish preview here.
@@ -18,14 +17,18 @@ export function AssetSubmitPage() {
   const { accessToken } = useAuth();
   const navigate = useNavigate();
 
+  const categories = useFurnitureCategories();
   const [file, setFile] = useState<File | null>(null);
   const [name, setName] = useState('');
-  const [category, setCategory] = useState(CATEGORIES[0] as string);
+  // '' until the user picks one explicitly; defaults to the fetched list's
+  // first entry once it arrives, without needing a setState-in-effect seed.
+  const [chosenCategory, setChosenCategory] = useState('');
+  const category = chosenCategory || (categories[0] ?? '');
   const [publishing, setPublishing] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
 
   async function publish() {
-    if (!accessToken || !file || !name) return;
+    if (!accessToken || !file || !name || !category) return;
     setPublishing(true);
     setError(null);
     try {
@@ -74,8 +77,8 @@ export function AssetSubmitPage() {
 
           <label className="flex flex-col gap-1 text-sm text-muted">
             Category
-            <select value={category} onChange={(event) => setCategory(event.target.value)} className={fieldClass}>
-              {CATEGORIES.map((option) => (
+            <select value={category} onChange={(event) => setChosenCategory(event.target.value)} className={fieldClass}>
+              {categories.map((option) => (
                 <option key={option} value={option}>
                   {option}
                 </option>
@@ -87,7 +90,7 @@ export function AssetSubmitPage() {
             <button
               type="button"
               onClick={() => void publish()}
-              disabled={!file || !name || publishing}
+              disabled={!file || !name || !category || publishing}
               className="border-2 border-accent px-4 py-2 text-sm text-accent hover:bg-accent hover:text-accent-solid-ink disabled:opacity-50"
             >
               {publishing ? 'Publishing…' : 'Publish'}

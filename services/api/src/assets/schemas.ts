@@ -137,21 +137,40 @@ export const customAssetCatalogResponseSchema = {
  * manual cross-field validation for `discordUserId` (JSON Schema's
  * conditional keywords would need `if`/`then` here for one extra field,
  * which is more machinery than the one check it replaces).
+ *
+ * `categories` is not hardcoded — it comes from `furnitureCategories()`
+ * (`@pixel-index/layout-core`), derived from the pinned vendor's real
+ * bundled furniture manifests, so this schema can no longer drift from what
+ * `packages/layout-core/schema/custom-asset-furniture-manifest.schema.json`
+ * (generated from the same function) accepts. Built once per app instance
+ * inside `registerAssetSubmitRoutes` — `config.upstreamDir` isn't known at
+ * module load time.
+ *
+ * An empty `categories` (the pinned upstream was unreadable — `submit.ts`
+ * degrades to `[]` rather than crashing route registration) falls back to
+ * an unconstrained string rather than `enum: []`, which ajv rejects
+ * outright as an invalid schema — a broken upstream should mean "any
+ * category is accepted for now", not "the whole app fails to boot".
  */
-export const submitCustomAssetQuerySchema = {
-  type: 'object',
-  additionalProperties: false,
-  properties: {
-    name: { type: 'string', minLength: 1, maxLength: 60 },
-    assetKind: { type: 'string', enum: ['furniture', 'character', 'pet'] },
-    category: {
-      type: 'string',
-      enum: ['desks', 'chairs', 'electronics', 'storage', 'decor', 'misc', 'wall'],
+export function buildSubmitCustomAssetQuerySchema(categories: readonly string[]) {
+  // Each branch needs its own `as const` — a bare ternary between the two
+  // object literals widens `type: 'string'` to `type: string` in the
+  // merged type, which then fails FromSchema's JSONSchema constraint.
+  const category =
+    categories.length > 0 ? ({ type: 'string', enum: categories } as const) : ({ type: 'string' } as const);
+
+  return {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      name: { type: 'string', minLength: 1, maxLength: 60 },
+      assetKind: { type: 'string', enum: ['furniture', 'character', 'pet'] },
+      category,
+      // Required only for an X-Api-Key-authenticated (bot-originated) upload —
+      // see submit.ts. A web upload attributes to the caller's own session and
+      // must not supply this.
+      discordUserId: { type: 'string', pattern: '^\\d{17,20}$' },
     },
-    // Required only for an X-Api-Key-authenticated (bot-originated) upload —
-    // see submit.ts. A web upload attributes to the caller's own session and
-    // must not supply this.
-    discordUserId: { type: 'string', pattern: '^\\d{17,20}$' },
-  },
-  required: ['name', 'assetKind'],
-} as const;
+    required: ['name', 'assetKind'],
+  } as const;
+}

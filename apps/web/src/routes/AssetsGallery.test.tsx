@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -6,6 +6,8 @@ import { requestUrl } from '../test/fetchStub';
 import { AssetsGallery } from './AssetsGallery';
 
 afterEach(() => vi.unstubAllGlobals());
+
+const FURNITURE_CATEGORIES = ['chairs', 'decor', 'desks', 'electronics', 'misc', 'wall'];
 
 function renderGallery(initialEntries: string[] = ['/assets']) {
   return render(
@@ -33,7 +35,11 @@ function summary(overrides: Record<string, unknown> = {}) {
 function stubAssetsFetch(handle: (url: string) => Response) {
   vi.stubGlobal(
     'fetch',
-    vi.fn(async (input: RequestInfo | URL) => handle(requestUrl(input))),
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = requestUrl(input);
+      if (url.includes('furniture-categories.json')) return Response.json(FURNITURE_CATEGORIES);
+      return handle(url);
+    }),
   );
 }
 
@@ -75,6 +81,10 @@ describe('AssetsGallery', () => {
     });
     renderGallery();
     await screen.findByText('My Chair');
+    // The <select>'s options populate asynchronously (furniture-categories.json) —
+    // wait for the real option to exist before selecting it, or jsdom leaves
+    // the select's value unchanged (no matching <option> yet).
+    await waitFor(() => expect(screen.getByRole('option', { name: 'decor' })).toBeInTheDocument());
 
     fireEvent.change(screen.getByLabelText('Category'), { target: { value: 'decor' } });
 
@@ -129,6 +139,34 @@ describe('AssetsGallery', () => {
     expect(await screen.findByText('Builtin Chair')).toBeInTheDocument();
     expect(screen.queryByText('My Chair')).not.toBeInTheDocument();
     expect(lastUrl).toContain('source=builtin');
+  });
+
+  it('re-fetches from scratch when the kind filter changes', async () => {
+    let lastUrl = '';
+    stubAssetsFetch((url) => {
+      lastUrl = url;
+      const wantsPets = url.includes('assetKind=pet');
+      return Response.json({
+        schemaVersion: 1,
+        total: 1,
+        assets: [
+          summary(
+            wantsPets
+              ? { assetId: 'MY_PET', name: 'My Pet', category: null, assetKind: 'pet' }
+              : {},
+          ),
+        ],
+        nextCursor: null,
+      });
+    });
+    renderGallery();
+    await screen.findByText('My Chair');
+
+    fireEvent.change(screen.getByLabelText('Kind'), { target: { value: 'pet' } });
+
+    expect(await screen.findByText('My Pet')).toBeInTheDocument();
+    expect(screen.queryByText('My Chair')).not.toBeInTheDocument();
+    expect(lastUrl).toContain('assetKind=pet');
   });
 
   it('loads the next page via "Load more" and appends', async () => {

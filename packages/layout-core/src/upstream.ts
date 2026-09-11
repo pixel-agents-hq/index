@@ -219,6 +219,24 @@ export function knownFurnitureIds(upstreamDir?: string): Set<string> {
 }
 
 /**
+ * Every distinct category any bundled furniture manifest actually declares,
+ * sorted. Derived from `furnitureCatalog()` rather than a hand-typed list —
+ * upstream has no enforced category enum of its own (`category` is a bare
+ * string throughout `core/`), so "the current real set" is only knowable by
+ * reading what the pinned manifests actually use, not by mirroring a
+ * declared-but-partly-unused palette list from the (unimportable) webview
+ * layer. Not every category the upstream UI palette supports is guaranteed
+ * to appear here — only ones at least one bundled asset actually uses.
+ */
+export function furnitureCategories(upstreamDir?: string): string[] {
+  const categories = new Set<string>();
+  for (const entry of furnitureCatalog(upstreamDir).values()) {
+    if (entry.category) categories.add(entry.category);
+  }
+  return [...categories].sort();
+}
+
+/**
  * The committed record of which upstream commit `vendor/pixel-agents` pins.
  *
  * A sibling of the checkout, not a file inside it: anything written *into* the

@@ -3,8 +3,7 @@ import {
   DEFAULT_ASSET_FILTERS,
   isDefaultAssetFilters,
 } from '../routes/assetFilters';
-
-const CATEGORIES = ['desks', 'chairs', 'electronics', 'storage', 'decor', 'misc', 'wall'];
+import { useFurnitureCategories } from '../routes/furnitureCategories';
 
 export function AssetFilterBar({
   filters,
@@ -13,11 +12,28 @@ export function AssetFilterBar({
   filters: AssetFilters;
   onChange: (next: AssetFilters) => void;
 }) {
+  const categories = useFurnitureCategories();
   const selectClass = 'border border-border bg-canvas px-2 py-1.5 text-ink';
 
   return (
     <div className="mb-6 flex flex-col gap-4 border-2 border-border bg-surface p-4">
       <div className="flex flex-wrap items-center gap-3">
+        <label className="flex items-center gap-1.5 text-sm text-muted">
+          Kind
+          <select
+            value={filters.assetKind ?? ''}
+            onChange={(event) =>
+              onChange({ ...filters, assetKind: (event.target.value || null) as AssetFilters['assetKind'] })
+            }
+            className={selectClass}
+          >
+            <option value="">Any</option>
+            <option value="furniture">Furniture</option>
+            <option value="character">Character</option>
+            <option value="pet">Pet</option>
+          </select>
+        </label>
+
         <label className="flex items-center gap-1.5 text-sm text-muted">
           Category
           <select
@@ -26,7 +42,7 @@ export function AssetFilterBar({
             className={selectClass}
           >
             <option value="">Any</option>
-            {CATEGORIES.map((category) => (
+            {categories.map((category) => (
               <option key={category} value={category}>
                 {category}
               </option>
