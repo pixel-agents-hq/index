@@ -84,13 +84,18 @@ flowchart TB
         Blender["Blender render job"]
     end
 
+    subgraph Vendor["vendor/pixel-agents (pinned submodule)"]
+        VendorAssets["webview-ui/public/assets/<br/>{furniture, characters, pets}<br/>only vendor/pixel-agents.commit is git-versioned"]
+    end
+
     subgraph Index["pixel-index"]
         WebUI["/assets/submit<br/>(apps/web)"]
         Gallery["/layouts/ and /assets/<br/>galleries + detail pages"]
         API["services/api<br/>POST /api/v1/assets"]
         APIKeys["Moderator-issued API keys<br/>(new, hashed-at-rest)"]
         Decode["Server-side decode<br/>(reuses vendor/pixel-agents/core/src/assets/*)"]
-        DB[(Postgres:<br/>manifest + decoded sprite JSON + raw PNG)]
+        BuiltinSync["builtinSync.ts<br/>(boot-time reconcile against<br/>the pinned commit — new)"]
+        DB[(Postgres custom_assets:<br/>manifest + decoded sprite JSON + raw PNG,<br/>tagged source: builtin | custom)]
         BrowserClient["apps/web live-office<br/>loadLiveOfficeAssets()"]
         Renderer["services/renderer<br/>Playwright + upstream's own webview-ui"]
     end
@@ -108,19 +113,26 @@ flowchart TB
     API --> APIKeys
     API --> Decode --> DB
 
+    VendorAssets -- "read once per boot" --> BuiltinSync
+    BuiltinSync -- "same decode.ts/decodeCharacter.ts/decodePet.ts\npipeline as an upload; on a pin change:\nDELETE+INSERT source='builtin' only\n(source='custom' rows never touched)" --> DB
+
     DB -- "GET custom catalog+sprites JSON" --> BrowserClient
     BrowserClient -- "merge with static bundle,\ncall buildDynamicCatalog() ONCE" --> Render1["office palette (browser)"]
 
     DB -- "GET custom catalog JSON + raw PNGs" --> Renderer
     Renderer -- "page.route() intercepts\nfurniture-catalog.json + PNG fetches" --> Render2["office preview (server-rendered PNG)"]
 
-    DB -- "list/detail" --> Gallery
+    DB -- "list/detail, both sources" --> Gallery
     Gallery -- "'Open in editor'\n(same shape as /layouts/:slug's ?from=)" --> BrowserClient
 ```
 
-*(Reproduced verbatim from issue #101's own architecture diagram — the
-`pixel-agents-cogs` half is aspirational/tracked-elsewhere; everything under
-`Index["pixel-index"]` is implemented in this repo, see below.)*
+*(The `pixel-agents-cogs`/`pixel-art-mcp` half and everything under `Index` except
+`BuiltinSync`/`Vendor` reproduce issue #101's own architecture diagram verbatim — the
+`pixel-agents-cogs` half is aspirational/tracked-elsewhere, the rest is implemented in
+this repo, see below. `Vendor`, `BuiltinSync`, and the edges into/out of them are new,
+added here for the built-in-asset gallery design decided in
+[Extending the gallery to built-in assets](#extending-the-gallery-to-built-in-assets)
+below — not part of #101 itself.)*
 
 ## As built, in this repo
 
