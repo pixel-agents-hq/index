@@ -53,16 +53,23 @@ async function buildZip(files: Record<string, Buffer | string>): Promise<Buffer>
 }
 
 interface VendorFurnitureManifest {
+  id: string;
   name: string;
   category: string;
+  type: 'asset' | 'group';
+  file?: string;
 }
 
 /**
- * One `furniture/<ID>/{manifest.json, *.png}` vendor directory, zipped
- * exactly as it sits on disk (manifest.json + every PNG at the zip root,
- * same flat shape `decodeFurnitureZip` already expects — `manifest.file`
- * fields are bare filenames, resolved relative to the manifest's own zip
- * directory) — no translation, just repackaging.
+ * One `furniture/<ID>/{manifest.json, *.png}` vendor directory, zipped as it
+ * sits on disk (manifest.json + every PNG at the zip root, same flat shape
+ * `decodeFurnitureZip` already expects — `manifest.file` fields are bare
+ * filenames, resolved relative to the manifest's own zip directory) — with
+ * one normalization: a flat (`type: "asset"`) vendor manifest omits `file`
+ * entirely (upstream's own loader defaults it to `<id>.png`), but the
+ * upload-validation schema requires it explicitly. A nested group's own
+ * members always specify `file` already, so this only ever fires at the
+ * root, and only for the single-PNG case where `<id>.png` is unambiguous.
  */
 async function decodeBuiltinFurniture(
   dirPath: string,
@@ -70,8 +77,12 @@ async function decodeBuiltinFurniture(
 ): Promise<{ decoded: DecodedFurnitureAsset; zipBuffer: Buffer }> {
   const manifestRaw = fs.readFileSync(path.join(dirPath, 'manifest.json'), 'utf-8');
   const manifest = JSON.parse(manifestRaw) as VendorFurnitureManifest;
+  const manifestForZip =
+    manifest.type === 'asset' && !manifest.file
+      ? JSON.stringify({ ...manifest, file: `${manifest.id}.png` })
+      : manifestRaw;
 
-  const files: Record<string, Buffer | string> = { 'manifest.json': manifestRaw };
+  const files: Record<string, Buffer | string> = { 'manifest.json': manifestForZip };
   for (const entry of fs.readdirSync(dirPath)) {
     if (entry.toLowerCase().endsWith('.png')) {
       files[entry] = fs.readFileSync(path.join(dirPath, entry));

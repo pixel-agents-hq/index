@@ -37,12 +37,15 @@ function writeFixtureVendor(opts: {
       fs.mkdirSync(dir, { recursive: true });
       fs.writeFileSync(
         path.join(dir, 'manifest.json'),
+        // No `file` field — matching the real vendor tree's own convention
+        // for a flat single-PNG item (upstream's own loader defaults it to
+        // `<id>.png`; builtinSync.ts has to inject it before decode, since
+        // the upload-validation schema requires it explicitly).
         JSON.stringify({
           id: item.id,
           name: item.id,
           category: item.category ?? 'chairs',
           type: 'asset',
-          file: `${item.id}.png`,
           width: 16,
           height: 16,
           footprintW: 1,
@@ -128,6 +131,12 @@ describe('syncBuiltinAssets', () => {
     }
     // Pet id upper-cased for storage; display name keeps its original casing.
     expect(rows.find((r) => r.assetId === 'GITCAT')?.name).toBe('Gitcat');
+    // The fixture's flat furniture manifest has no `file` field (matching the
+    // real vendor tree's own convention) — builtinSync.ts must inject
+    // `<id>.png` before decode, or decodeFurnitureZip's schema validation
+    // rejects every flat built-in item.
+    const chair = rows.find((r) => r.assetId === 'CHAIR');
+    expect((chair?.manifest as { file: string }[])[0]?.file).toBe('CHAIR.png');
   });
 
   it('re-running with an unchanged pin no-ops', async () => {
