@@ -10,6 +10,8 @@
  * same second, two layouts with the same furniture count, …).
  */
 
+import { type SQL, sql, type SQLWrapper } from 'drizzle-orm';
+
 export type SortKey = 'newest' | 'furniture' | 'largest' | 'title';
 
 export interface Cursor {
@@ -46,4 +48,24 @@ export function decodeCursor(raw: string, expectedSort: SortKey): Cursor | null 
   if (typeof candidate.value !== 'string' && typeof candidate.value !== 'number') return null;
   if (typeof candidate.id !== 'string') return null;
   return candidate;
+}
+
+/**
+ * Epoch-microseconds for a `timestamp` column/expression — use this, not
+ * `date.toISOString()`, for any 'newest'-sort cursor value.
+ *
+ * JS `Date` only has millisecond resolution, so `row.createdAt.toISOString()`
+ * truncates whatever sub-millisecond precision Postgres actually stored.
+ * `now()` (every `createdAt` default) reliably carries microsecond
+ * precision, and a bulk insert that shares one `now()` call across many rows
+ * (e.g. `builtinSync.ts`'s reconciliation) makes many rows tie on it
+ * exactly. A truncated cursor value then sits strictly *below* the true
+ * value shared by every one of those tied rows, so none of them satisfy `<`
+ * or `=` against it on the next page — they silently vanish instead of
+ * paginating in. Comparing epoch microseconds (a plain integer, safely
+ * inside JS's safe-integer range for centuries) instead of the formatted
+ * string sidesteps the truncation entirely.
+ */
+export function timestampMicros(expr: SQLWrapper): SQL<number> {
+  return sql<number>`(extract(epoch from ${expr}) * 1000000)`;
 }

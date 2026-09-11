@@ -4,7 +4,7 @@ import { and, desc, eq, sql } from 'drizzle-orm';
 
 import type { AnyDatabase } from '../db/client.js';
 import * as schema from '../db/schema.js';
-import { type Cursor, decodeCursor, encodeCursor } from '../layouts/cursor.js';
+import { type Cursor, decodeCursor, encodeCursor, timestampMicros } from '../layouts/cursor.js';
 
 export interface ListCustomAssetsFilters {
   assetKind?: schema.CustomAsset['assetKind'];
@@ -39,7 +39,7 @@ function buildConditions(filters: ListCustomAssetsFilters) {
 }
 
 function cursorCondition(cursor: Cursor) {
-  return sql`(${schema.customAssets.createdAt}, ${schema.customAssets.id}) < (${cursor.value}, ${cursor.id})`;
+  return sql`(${timestampMicros(schema.customAssets.createdAt)}, ${schema.customAssets.id}) < (${cursor.value}, ${cursor.id})`;
 }
 
 export async function listCustomAssets(
@@ -68,10 +68,17 @@ export async function listCustomAssets(
   const rows = hasMore ? page.slice(0, limit) : page;
   const lastRow = rows[rows.length - 1];
 
-  const nextCursor =
-    hasMore && lastRow
-      ? encodeCursor({ sort: SORT, value: lastRow.createdAt.toISOString(), id: lastRow.id })
-      : null;
+  let nextCursor: string | null = null;
+  if (hasMore && lastRow) {
+    // lastRow.createdAt.toISOString() would truncate to millisecond
+    // precision — see timestampMicros()'s doc comment for why that silently
+    // drops rows that tie with it at microsecond precision.
+    const [micros] = await db
+      .select({ value: timestampMicros(schema.customAssets.createdAt) })
+      .from(schema.customAssets)
+      .where(eq(schema.customAssets.id, lastRow.id));
+    nextCursor = encodeCursor({ sort: SORT, value: micros?.value ?? lastRow.createdAt.getTime() * 1000, id: lastRow.id });
+  }
 
   return { rows, total, nextCursor };
 }
