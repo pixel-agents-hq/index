@@ -91,9 +91,12 @@ this API's shape.
   prefer one over the other.
 - Manifest schema:
   [`packages/layout-core/schema/custom-asset-furniture-manifest.schema.json`](../packages/layout-core/schema/custom-asset-furniture-manifest.schema.json).
-  Covers the 7-value `category` enum (`desks`, `chairs`, `electronics`, `storage`,
-  `decor`, `misc`, `wall` — kept as-is for upstream parity, #105) and the recursive
-  `asset`/`group` node shape (rotation/state/animation groups).
+  Covers the `category` enum and the recursive `asset`/`group` node shape
+  (rotation/state/animation groups). `category` is **not a fixed list** — it's
+  generated (`tools/generate-furniture-categories-schema.mjs`) from the categories
+  the pinned vendor's real bundled furniture manifests actually use, so it can change
+  across a vendor bump. Fetch `GET /api/v1/assets/schema/furniture` from a running
+  instance for the live enum rather than hardcoding one.
 - PNG dimensions are **per-manifest**, not fixed: each `asset` node declares its own
   `width`/`height`, and the uploaded PNG must match those exactly (`decodePng` in
   `zip.ts` rejects a mismatch rather than silently misreading the buffer).
