@@ -95,7 +95,7 @@ flowchart TB
         APIKeys["Moderator-issued API keys<br/>(new, hashed-at-rest)"]
         Decode["Server-side decode<br/>(reuses vendor/pixel-agents/core/src/assets/*)"]
         BuiltinSync["builtinSync.ts<br/>(boot-time reconcile against<br/>the pinned commit — new)"]
-        DB[(Postgres custom_assets:<br/>manifest + decoded sprite JSON + raw PNG,<br/>tagged source: builtin | custom)]
+        DB[("Postgres custom_assets:<br/>manifest + decoded sprite JSON + raw PNG,<br/>tagged source: builtin or custom")]
         BrowserClient["apps/web live-office<br/>loadLiveOfficeAssets()"]
         Renderer["services/renderer<br/>Playwright + upstream's own webview-ui"]
     end
