@@ -32,7 +32,7 @@ import type { AnyDatabase } from '../db/client.js';
 import { PIXEL_AGENTS_SYSTEM_USER_ID } from '../db/constants.js';
 import * as schema from '../db/schema.js';
 import { type DecodedFurnitureAsset, decodeFurnitureZip } from './decode.js';
-import { decodeCharacterZip,type DecodedCharacterAsset } from './decodeCharacter.js';
+import { type DecodedCharacterAsset, decodeCharacterZip } from './decodeCharacter.js';
 import { type DecodedPetAsset, decodePetZip } from './decodePet.js';
 import type { IdCollisionChecker } from './zip.js';
 
@@ -90,24 +90,30 @@ async function decodeBuiltinFurniture(
   }
 
   const zipBuffer = await buildZip(files);
-  const decoded = await decodeFurnitureZip(zipBuffer, manifest.name, manifest.category, isIdTaken);
+  const decoded = await decodeFurnitureZip(zipBuffer, isIdTaken);
   return { decoded, zipBuffer };
 }
 
 /**
  * One `characters/char_N.png` vendor file. Upstream characters have no
- * manifest or id at all (#105) — `label` (e.g. `'Char 0'`) is fed straight
- * through to `decodeCharacterZip`'s existing name-slugifying id derivation,
- * which turns `'Char 0'`..`'Char 5'` into `CHAR_0`..`CHAR_5` on its own; no
- * separate id scheme needed here.
+ * manifest or id at all — `decodeCharacterZip` now requires one (#105
+ * follow-up: custom character uploads carry `manifest.json` too, mirroring
+ * pets), so a synthetic `{id, name}` manifest is built here the same way
+ * `decodeBuiltinPet` already does for vendor pets, deriving the id from the
+ * file's own index (`char_0.png` → `CHAR_0`).
  */
 async function decodeBuiltinCharacter(
   pngPath: string,
+  index: number,
   label: string,
   isIdTaken: IdCollisionChecker,
 ): Promise<{ decoded: DecodedCharacterAsset; zipBuffer: Buffer }> {
-  const zipBuffer = await buildZip({ [path.basename(pngPath)]: fs.readFileSync(pngPath) });
-  const decoded = await decodeCharacterZip(zipBuffer, label, isIdTaken);
+  const syntheticManifest = { id: `CHAR_${index}`, name: label };
+  const zipBuffer = await buildZip({
+    'manifest.json': JSON.stringify(syntheticManifest),
+    [path.basename(pngPath)]: fs.readFileSync(pngPath),
+  });
+  const decoded = await decodeCharacterZip(zipBuffer, isIdTaken);
   return { decoded, zipBuffer };
 }
 
@@ -137,7 +143,7 @@ async function decodeBuiltinPet(
     'manifest.json': JSON.stringify(syntheticManifest),
     'pet.png': fs.readFileSync(path.join(dirPath, 'pet.png')),
   });
-  const decoded = await decodePetZip(zipBuffer, syntheticManifest.name, isIdTaken);
+  const decoded = await decodePetZip(zipBuffer, isIdTaken);
   return { decoded, zipBuffer };
 }
 
@@ -226,6 +232,7 @@ export async function syncBuiltinAssets(db: AnyDatabase, upstreamDir?: string): 
     for (const n of characterIndices) {
       const { decoded, zipBuffer } = await decodeBuiltinCharacter(
         path.join(charactersDir, `char_${n}.png`),
+        n,
         `Char ${n}`,
         isIdTaken,
       );

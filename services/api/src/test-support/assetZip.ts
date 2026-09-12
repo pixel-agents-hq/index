@@ -18,7 +18,14 @@ export function tinyPng(width: number, height: number): Buffer {
 /** A single-asset manifest + matching PNG, zipped at the root (the flat, hand-crafted shape). */
 export async function simpleAssetZip(
   id: string,
-  overrides: { width?: number; height?: number; pngWidth?: number; pngHeight?: number } = {},
+  overrides: {
+    width?: number;
+    height?: number;
+    pngWidth?: number;
+    pngHeight?: number;
+    name?: string;
+    category?: string;
+  } = {},
 ): Promise<Buffer> {
   const width = overrides.width ?? 16;
   const height = overrides.height ?? 16;
@@ -27,8 +34,8 @@ export async function simpleAssetZip(
     'manifest.json',
     JSON.stringify({
       id,
-      name: 'Test Chair',
-      category: 'chairs',
+      name: overrides.name ?? 'Test Chair',
+      category: overrides.category ?? 'chairs',
       type: 'asset',
       file: `${id}.png`,
       width,
@@ -44,9 +51,16 @@ export async function simpleAssetZip(
   return zip.generateAsync({ type: 'nodebuffer' });
 }
 
-/** A custom-character zip (#105): exactly one 112×96 PNG, no manifest.json. */
-export async function characterZip(overrides: { pngWidth?: number; pngHeight?: number } = {}): Promise<Buffer> {
+/** A custom-character zip (#105 follow-up): `manifest.json` (`{id, name}`) + a 112×96 PNG, mirroring `petZip`. */
+export async function characterZip(
+  id = 'TEST_HERO',
+  name = 'Test Hero',
+  overrides: { pngWidth?: number; pngHeight?: number; includeManifest?: boolean } = {},
+): Promise<Buffer> {
   const zip = new JSZip();
+  if (overrides.includeManifest !== false) {
+    zip.file('manifest.json', JSON.stringify({ id, name }));
+  }
   zip.file('char.png', tinyPng(overrides.pngWidth ?? 112, overrides.pngHeight ?? 96));
   return zip.generateAsync({ type: 'nodebuffer' });
 }

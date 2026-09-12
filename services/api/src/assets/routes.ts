@@ -3,7 +3,11 @@
  * `layouts/routes.ts`. No auth anywhere in this file.
  */
 
-import { customAssetFurnitureManifestSchema, customAssetPetManifestSchema } from '@pixel-index/layout-core';
+import {
+  customAssetCharacterManifestSchema,
+  customAssetFurnitureManifestSchema,
+  customAssetPetManifestSchema,
+} from '@pixel-index/layout-core';
 import { eq } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 
@@ -68,11 +72,6 @@ function representativeSpriteGrid(asset: schema.CustomAsset): string[][] | undef
   }
 }
 
-/**
- * `character` has no manifest.json at all (#105) — nothing to publish a
- * schema for, so it's `undefined` here and the route 404s with a pointer to
- * where its PNG-only rule actually lives.
- */
 function manifestSchemaFor(kind: 'furniture' | 'character' | 'pet'): object | undefined {
   switch (kind) {
     case 'furniture':
@@ -80,7 +79,7 @@ function manifestSchemaFor(kind: 'furniture' | 'character' | 'pet'): object | un
     case 'pet':
       return customAssetPetManifestSchema;
     case 'character':
-      return undefined;
+      return customAssetCharacterManifestSchema;
   }
 }
 

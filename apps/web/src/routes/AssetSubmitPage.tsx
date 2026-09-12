@@ -5,34 +5,32 @@ import { ApiError } from '../api/client';
 import { submitAsset } from '../api/manageClient';
 import { useAuth } from '../auth/authState';
 import { SubmissionGate } from '../components/SubmissionGate';
-import { useFurnitureCategories } from './furnitureCategories';
 
 /**
  * Upload + server-side validation only (#101) — no pre-publish preview here.
  * A faithful preview (animated for an animated asset, every orientation for
  * a rotation group) needs the real engine's rendering logic, which is #102's
  * job; building a naive one here would need re-doing once that lands.
+ *
+ * No name/category/kind fields (#105 follow-up) — every kind's manifest.json
+ * already carries `name` (and furniture's carries `category`), and the
+ * server detects `assetKind` from the zip's own contents, so the zip alone
+ * is a complete upload.
  */
 export function AssetSubmitPage() {
   const { accessToken } = useAuth();
   const navigate = useNavigate();
 
-  const categories = useFurnitureCategories();
   const [file, setFile] = useState<File | null>(null);
-  const [name, setName] = useState('');
-  // '' until the user picks one explicitly; defaults to the fetched list's
-  // first entry once it arrives, without needing a setState-in-effect seed.
-  const [chosenCategory, setChosenCategory] = useState('');
-  const category = chosenCategory || (categories[0] ?? '');
   const [publishing, setPublishing] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
 
   async function publish() {
-    if (!accessToken || !file || !name || !category) return;
+    if (!accessToken || !file) return;
     setPublishing(true);
     setError(null);
     try {
-      const result = await submitAsset(file, { name, assetKind: 'furniture', category }, accessToken);
+      const result = await submitAsset(file, accessToken);
       void navigate(`/assets/${result.assetId}`);
     } catch (caught) {
       setError(caught instanceof ApiError ? caught : new ApiError(0, 'Something unexpected went wrong.'));
@@ -41,16 +39,15 @@ export function AssetSubmitPage() {
     }
   }
 
-  const fieldClass = 'border border-border bg-canvas px-2 py-1.5 text-ink';
-
   return (
     <div className="max-w-2xl">
       <h1 className="font-display text-2xl text-ink">Upload a custom asset</h1>
       <SubmissionGate what="Custom asset uploads">
         <p className="mt-1 text-sm text-muted">
-          A zip containing a <code>manifest.json</code> and its PNG sprite(s) — the same shape
-          pixel-agents' own external-asset directories use, and what pixel-art-mcp's{' '}
-          <code>pixel_agents</code> export option already produces.
+          A furniture, character, or pet zip — the same shape pixel-agents' own
+          external-asset directories use, and what pixel-art-mcp's export tools already
+          produce. The kind, name, and (for furniture) category are all read from the
+          zip itself, so the zip alone is enough.
         </p>
 
         <div className="mt-6 flex flex-col gap-4">
@@ -64,33 +61,11 @@ export function AssetSubmitPage() {
             />
           </label>
 
-          <label className="flex flex-col gap-1 text-sm text-muted">
-            Name
-            <input
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              maxLength={60}
-              required
-              className={fieldClass}
-            />
-          </label>
-
-          <label className="flex flex-col gap-1 text-sm text-muted">
-            Category
-            <select value={category} onChange={(event) => setChosenCategory(event.target.value)} className={fieldClass}>
-              {categories.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-          </label>
-
           <div className="flex gap-3">
             <button
               type="button"
               onClick={() => void publish()}
-              disabled={!file || !name || !category || publishing}
+              disabled={!file || publishing}
               className="border-2 border-accent px-4 py-2 text-sm text-accent hover:bg-accent hover:text-accent-solid-ink disabled:opacity-50"
             >
               {publishing ? 'Publishing…' : 'Publish'}

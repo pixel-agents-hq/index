@@ -10,6 +10,11 @@
  * directory. No translation layer between what pixel-art-mcp ships and what
  * this accepts, by design (issue #101).
  *
+ * `name`/`category` are read straight from the manifest, not passed in by
+ * the caller (#105 follow-up) — the manifest already carries both, and a
+ * separately-typed value could silently drift from what's actually baked
+ * into the upload.
+ *
  * The zip/PNG plumbing this shares with `decodeCharacter.ts`/`decodePet.ts`
  * lives in `zip.ts` (#105) — this module keeps only what's furniture-specific:
  * manifest-tree flattening and the category-driven `isDesk` derivation.
@@ -82,8 +87,6 @@ function rewriteIds(assets: FlattenedAsset[], fromRoot: string, toRoot: string):
 
 export async function decodeFurnitureZip(
   zipBuffer: Buffer,
-  name: string,
-  category: string,
   isIdTaken: IdCollisionChecker,
 ): Promise<DecodedFurnitureAsset> {
   let zip: JSZip;
@@ -153,8 +156,8 @@ export async function decodeFurnitureZip(
     assetKind: 'furniture',
     assetId: assignedRootId,
     requestedAssetId,
-    name,
-    category,
+    name: manifest.name,
+    category: manifest.category,
     manifest: renamed,
     sprites,
     tags: furnitureTags(renamed),

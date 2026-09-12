@@ -34,8 +34,8 @@ async function publish(id: string, category = 'chairs') {
   );
   const response = await app.inject({
     method: 'POST',
-    url: `/api/v1/assets?assetKind=furniture&name=${id}&category=${category}`,
-    payload: await simpleAssetZip(id),
+    url: '/api/v1/assets',
+    payload: await simpleAssetZip(id, { name: id, category }),
     headers: { 'content-type': 'application/zip', authorization: `Bearer ${accessToken}` },
   });
   return response.json<PublicCustomAssetDetail>();
@@ -50,8 +50,8 @@ async function publishCharacter(name: string) {
   );
   const response = await app.inject({
     method: 'POST',
-    url: `/api/v1/assets?assetKind=character&name=${name}`,
-    payload: await characterZip(),
+    url: '/api/v1/assets',
+    payload: await characterZip(name, name),
     headers: { 'content-type': 'application/zip', authorization: `Bearer ${accessToken}` },
   });
   return response.json<PublicCustomAssetDetail>();
@@ -234,9 +234,12 @@ describe('GET /api/v1/assets/schema/:kind (#107)', () => {
     expect(body.required).toEqual(['id', 'name']);
   });
 
-  it('404s for character — it has no manifest.json to have a schema for', async () => {
+  it('serves the character manifest schema, unauthenticated', async () => {
     const response = await app.inject({ method: 'GET', url: '/api/v1/assets/schema/character' });
-    expect(response.statusCode).toBe(404);
+    expect(response.statusCode).toBe(200);
+    const body = response.json<{ $id: string; required: string[] }>();
+    expect(body.$id).toContain('custom-asset-character-manifest.schema.json');
+    expect(body.required).toEqual(['id', 'name']);
   });
 
   it('400s for an unrecognized kind', async () => {

@@ -9,7 +9,7 @@ const noneTaken = () => false;
 describe('decodeFurnitureZip', () => {
   it('decodes a flat manifest.json + PNG at the zip root', async () => {
     const zip = await simpleAssetZip('MY_CHAIR');
-    const decoded = await decodeFurnitureZip(zip, 'My Chair', 'chairs', noneTaken);
+    const decoded = await decodeFurnitureZip(zip, noneTaken);
 
     expect(decoded.assetId).toBe('MY_CHAIR');
     expect(decoded.requestedAssetId).toBe('MY_CHAIR');
@@ -21,7 +21,7 @@ describe('decodeFurnitureZip', () => {
 
   it("decodes pixel-art-mcp's nested assets/furniture/<ID>/manifest.json shape", async () => {
     const zip = await nestedAssetZip('MY_LAMP');
-    const decoded = await decodeFurnitureZip(zip, 'My Lamp', 'decor', noneTaken);
+    const decoded = await decodeFurnitureZip(zip, noneTaken);
     expect(decoded.assetId).toBe('MY_LAMP');
     expect(decoded.sprites.MY_LAMP).toBeDefined();
   });
@@ -29,7 +29,7 @@ describe('decodeFurnitureZip', () => {
   it('auto-suffixes a colliding id rather than rejecting the upload', async () => {
     const zip = await simpleAssetZip('MY_CHAIR');
     const isTaken = (id: string) => id === 'MY_CHAIR';
-    const decoded = await decodeFurnitureZip(zip, 'My Chair', 'chairs', isTaken);
+    const decoded = await decodeFurnitureZip(zip, isTaken);
 
     expect(decoded.assetId).toBe('MY_CHAIR_2');
     expect(decoded.requestedAssetId).toBe('MY_CHAIR');
@@ -40,13 +40,13 @@ describe('decodeFurnitureZip', () => {
   it('tries successive suffixes until one is free', async () => {
     const zip = await simpleAssetZip('MY_CHAIR');
     const taken = new Set(['MY_CHAIR', 'MY_CHAIR_2', 'MY_CHAIR_3']);
-    const decoded = await decodeFurnitureZip(zip, 'My Chair', 'chairs', (id) => taken.has(id));
+    const decoded = await decodeFurnitureZip(zip, (id) => taken.has(id));
     expect(decoded.assetId).toBe('MY_CHAIR_4');
   });
 
   it('rejects a PNG whose actual dimensions do not match the manifest', async () => {
     const zip = await simpleAssetZip('MISMATCHED', { width: 16, height: 16, pngWidth: 32, pngHeight: 32 });
-    await expect(decodeFurnitureZip(zip, 'Mismatched', 'misc', noneTaken)).rejects.toMatchObject({
+    await expect(decodeFurnitureZip(zip, noneTaken)).rejects.toMatchObject({
       statusCode: 422,
     });
   });
@@ -55,7 +55,7 @@ describe('decodeFurnitureZip', () => {
     const zip = new JSZip();
     zip.file('readme.txt', 'oops');
     const buffer = await zip.generateAsync({ type: 'nodebuffer' });
-    await expect(decodeFurnitureZip(buffer, 'Nothing', 'misc', noneTaken)).rejects.toMatchObject({
+    await expect(decodeFurnitureZip(buffer, noneTaken)).rejects.toMatchObject({
       statusCode: 422,
     });
   });
@@ -64,7 +64,7 @@ describe('decodeFurnitureZip', () => {
     const zip = new JSZip();
     zip.file('manifest.json', JSON.stringify({ id: 'lowercase-not-allowed', type: 'asset' }));
     const buffer = await zip.generateAsync({ type: 'nodebuffer' });
-    const result = decodeFurnitureZip(buffer, 'Bad', 'misc', noneTaken);
+    const result = decodeFurnitureZip(buffer, noneTaken);
     await expect(result).rejects.toMatchObject({ statusCode: 422 });
     await result.catch((error: unknown) => {
       expect((error as { issues?: unknown[] }).issues?.length).toBeGreaterThan(0);
@@ -88,7 +88,7 @@ describe('decodeFurnitureZip', () => {
       }),
     );
     const buffer = await zip.generateAsync({ type: 'nodebuffer' });
-    await expect(decodeFurnitureZip(buffer, 'Missing', 'misc', noneTaken)).rejects.toMatchObject({
+    await expect(decodeFurnitureZip(buffer, noneTaken)).rejects.toMatchObject({
       statusCode: 422,
     });
   });
@@ -135,7 +135,7 @@ describe('decodeFurnitureZip', () => {
     zip.file('side.png', tinyPng(16, 32));
     const buffer = await zip.generateAsync({ type: 'nodebuffer' });
 
-    const decoded = await decodeFurnitureZip(buffer, 'My Desk', 'desks', (id) => id === 'MY_DESK');
+    const decoded = await decodeFurnitureZip(buffer, (id) => id === 'MY_DESK');
 
     expect(decoded.assetId).toBe('MY_DESK_2');
     const ids = decoded.manifest.map((m) => m.id).sort();

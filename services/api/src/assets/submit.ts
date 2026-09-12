@@ -19,7 +19,7 @@
  * custody of the key itself, not a per-call check (see #101's discussion).
  */
 
-import { furnitureCategories, knownFurnitureIds } from '@pixel-index/layout-core';
+import { knownFurnitureIds } from '@pixel-index/layout-core';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { FromSchema } from 'json-schema-to-ts';
 
@@ -36,44 +36,48 @@ import { isUniqueViolation } from '../layouts/metadata.js';
 import { recordModerationAction } from '../moderation/audit.js';
 import { writeRateLimitConfig } from '../rateLimit.js';
 import { type DecodedFurnitureAsset, decodeFurnitureZip } from './decode.js';
-import type { DecodedCharacterAsset } from './decodeCharacter.js';
-import { decodeCharacterZip } from './decodeCharacter.js';
+import { type DecodedCharacterAsset, decodeCharacterZip } from './decodeCharacter.js';
 import { type DecodedPetAsset, decodePetZip } from './decodePet.js';
 import { existingCustomAssetIds } from './query.js';
-import { buildSubmitCustomAssetQuerySchema } from './schemas.js';
+import { submitCustomAssetQuerySchema } from './schemas.js';
 import { toDetail } from './serialize.js';
 import type { IdCollisionChecker } from './zip.js';
 
 type DecodedAsset = DecodedFurnitureAsset | DecodedCharacterAsset | DecodedPetAsset;
 
 /**
- * Dispatches on `assetKind` to the one decode module that knows that kind's
- * zip shape (#105) — everything below this call (insert, moderation audit,
- * response) is kind-agnostic and stays that way, which is what makes the
- * upload gating above it structurally uniform rather than three call sites
- * that happen to agree today.
+ * All three kinds are now fully self-describing zips (#105 follow-up:
+ * `assetKind`/`category`/`name` are redundant with what's already inside the
+ * zip) — a pet's and a character's manifest are structurally identical
+ * (`{id, name}`, no `additionalProperties` restriction on either schema), so
+ * manifest shape alone can't tell them apart. The reliable signal is each
+ * decoder's own PNG dimension/layout check, so detection IS decoding: try
+ * furniture first (its manifest schema is structurally distinct — `category`/
+ * `type`/`members` — so a genuine furniture upload with a bad manifest fails
+ * clearly here rather than falling through), then character, then pet.
  */
-async function decodeByKind(
-  assetKind: 'furniture' | 'character' | 'pet',
-  zipBuffer: Buffer,
-  name: string,
-  category: string | undefined,
-  isIdTaken: IdCollisionChecker,
-): Promise<DecodedAsset> {
-  switch (assetKind) {
-    case 'furniture': {
-      if (!category) throw ApiError.badRequest('category is required when assetKind is "furniture".');
-      return decodeFurnitureZip(zipBuffer, name, category, isIdTaken);
-    }
-    case 'character': {
-      if (category) throw ApiError.badRequest('category is only accepted when assetKind is "furniture".');
-      return decodeCharacterZip(zipBuffer, name, isIdTaken);
-    }
-    case 'pet': {
-      if (category) throw ApiError.badRequest('category is only accepted when assetKind is "furniture".');
-      return decodePetZip(zipBuffer, name, isIdTaken);
+async function decodeAsset(zipBuffer: Buffer, isIdTaken: IdCollisionChecker): Promise<DecodedAsset> {
+  const attempts: Array<() => Promise<DecodedAsset>> = [
+    () => decodeFurnitureZip(zipBuffer, isIdTaken),
+    () => decodeCharacterZip(zipBuffer, isIdTaken),
+    () => decodePetZip(zipBuffer, isIdTaken),
+  ];
+
+  let lastError: ApiError | undefined;
+  for (const attempt of attempts) {
+    try {
+      return await attempt();
+    } catch (error) {
+      if (!(error instanceof ApiError)) throw error;
+      lastError = error;
     }
   }
+
+  throw ApiError.validation(
+    lastError?.issues ?? [],
+    'Could not recognize this zip as a furniture, character, or pet asset — see ' +
+      'docs/custom-asset-zip-contract.md for the shape each kind expects.',
+  );
 }
 
 export interface AssetSubmitRoutesDeps {
@@ -112,25 +116,6 @@ async function resolveUploader(
 }
 
 export function registerAssetSubmitRoutes(app: FastifyInstance, { config, db }: AssetSubmitRoutesDeps): void {
-  // Built once per app instance, not per request — config.upstreamDir isn't
-  // known at module load time, but the category set itself is static for
-  // the process's lifetime.
-  //
-  // Same degrade-rather-than-crash contract as /api/v1/meta's own
-  // upstreamPin() read (meta.ts): an unreadable/missing upstream must not
-  // take down route registration for the whole app. An empty category list
-  // falls back to an unconstrained string (buildSubmitCustomAssetQuerySchema
-  // below) rather than an empty enum, which ajv rejects outright as an
-  // invalid schema.
-  let categories: string[];
-  try {
-    categories = furnitureCategories(config.upstreamDir);
-  } catch (error) {
-    app.log.warn({ err: error }, 'could not read the pinned upstream for the furniture category enum');
-    categories = [];
-  }
-  const submitCustomAssetQuerySchema = buildSubmitCustomAssetQuerySchema(categories);
-
   // eslint-disable-next-line @typescript-eslint/require-await
   app.register(async (instance) => {
     // Scoped to this route only, same reasoning as layouts/submit.ts's
@@ -159,13 +144,7 @@ export function registerAssetSubmitRoutes(app: FastifyInstance, { config, db }: 
         const existing = await existingCustomAssetIds(db);
         const isIdTaken = (id: string) => builtIn.has(id) || existing.has(id);
 
-        const decoded = await decodeByKind(
-          request.query.assetKind,
-          zipBuffer,
-          request.query.name,
-          request.query.category,
-          isIdTaken,
-        );
+        const decoded = await decodeAsset(zipBuffer, isIdTaken);
 
         let created: schema.CustomAsset;
         try {

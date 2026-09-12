@@ -337,12 +337,3 @@ export interface ListAssetsParams {
   interactable?: boolean;
 }
 
-export interface SubmitAssetParams {
-  name: string;
-  /**
-   * #105: required by the API. This app only ever uploads furniture today —
-   * character/pet upload UI is a follow-up, not part of this change.
-   */
-  assetKind: 'furniture';
-  category: string;
-}

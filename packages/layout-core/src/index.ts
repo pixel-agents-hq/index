@@ -14,6 +14,7 @@
 
 export { withFormats } from './ajv.js';
 export {
+  customAssetCharacterManifestSchema,
   customAssetFurnitureManifestSchema,
   customAssetPetManifestSchema,
   layoutSchema,

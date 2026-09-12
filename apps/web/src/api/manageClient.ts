@@ -14,7 +14,6 @@ import type {
   ListOwnerLayoutsResponse,
   OwnerLayoutView,
   PatchLayoutBody,
-  SubmitAssetParams,
   SubmitLayoutParams,
 } from './types';
 
@@ -58,13 +57,16 @@ export function previewCheck(raw: string, accessToken?: string): Promise<Blob> {
 }
 
 /**
- * Publishes a custom furniture asset (#101) — a zip (manifest.json + PNGs),
- * same "no un-send" reasoning as every other mutating call here, hence no
- * `AbortSignal`. No pre-publish preview step (that's #102's job); the server
- * validates and, on success, the asset is live in this same response.
+ * Publishes a custom asset (furniture, character, or pet — #101, #105
+ * follow-up) — a zip whose own contents (manifest.json, PNG dimensions) tell
+ * the server everything it needs (kind, name, category), so this call takes
+ * no params beyond the file itself. Same "no un-send" reasoning as every
+ * other mutating call here, hence no `AbortSignal`. No pre-publish preview
+ * step (that's #102's job); the server validates and, on success, the asset
+ * is live in this same response.
  */
-export function submitAsset(zip: Blob, params: SubmitAssetParams, accessToken: string): Promise<AssetDetail> {
-  return apiRequest(`/api/v1/assets${toQueryString(params)}`, {
+export function submitAsset(zip: Blob, accessToken: string): Promise<AssetDetail> {
+  return apiRequest('/api/v1/assets', {
     method: 'POST',
     body: zip,
     accessToken,

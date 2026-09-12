@@ -23,6 +23,9 @@
  * but exceeds that cap would still fail to load in a real pixel-agents
  * install; enforcing the same cap here catches that before upload instead of
  * after (docs/custom-asset-zip-contract.md).
+ *
+ * `name` is read straight from the manifest, not passed in by the caller
+ * (#105 follow-up) — the manifest already requires it.
  */
 
 import { customAssetPetManifestSchema, withFormats } from '@pixel-index/layout-core';
@@ -143,11 +146,7 @@ function decodePetPng(buffer: Buffer, path: string): PetFrames {
 const ajv = withFormats(new Ajv2020({ allErrors: true, strict: false }));
 const validatePetManifest: ValidateFunction = ajv.compile(customAssetPetManifestSchema);
 
-export async function decodePetZip(
-  zipBuffer: Buffer,
-  name: string,
-  isIdTaken: IdCollisionChecker,
-): Promise<DecodedPetAsset> {
+export async function decodePetZip(zipBuffer: Buffer, isIdTaken: IdCollisionChecker): Promise<DecodedPetAsset> {
   let zip: JSZip;
   try {
     zip = await JSZip.loadAsync(zipBuffer);
@@ -176,6 +175,7 @@ export async function decodePetZip(
     );
   }
   const requestedId = (parsed as { id: string }).id;
+  const name = (parsed as { name: string }).name;
 
   const pngs = pngPaths(zip, dir);
   if (pngs.length === 0) throw issue('/', `No PNG was found alongside manifest.json in "${dir || '.'}".`);
