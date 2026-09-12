@@ -38,7 +38,7 @@ function stubAssetsFetch(handle: (url: string) => Response) {
     vi.fn(async (input: RequestInfo | URL) => {
       const url = requestUrl(input);
       if (url.includes('furniture-categories.json')) return Response.json(FURNITURE_CATEGORIES);
-      // Every rendered AssetCard fires its own AssetPreview request for
+      // Every rendered AssetCard fires its own AssetPoseMontage request for
       // animation frames — stubbed to "no poses" so cards fall back to their
       // static sprite, and kept out of `handle()` so it never shadows the
       // list request a test is actually asserting against.
@@ -59,6 +59,31 @@ describe('AssetsGallery', () => {
     expect(screen.getByText('by someone')).toBeInTheDocument();
     expect(screen.getByText('chairs', { selector: 'p' })).toBeInTheDocument();
     expect(screen.getByText('static', { selector: 'li' })).toBeInTheDocument();
+  });
+
+  it('shows every pose of a card, not just one', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = requestUrl(input);
+        if (url.includes('furniture-categories.json')) return Response.json(FURNITURE_CATEGORIES);
+        if (url.includes('/frames')) {
+          return Response.json({
+            schemaVersion: 1,
+            poses: [
+              { key: 'front-on', label: 'Front · On', frames: ['data:image/png;base64,on'] },
+              { key: 'front-off', label: 'Front · Off', frames: ['data:image/png;base64,off'] },
+            ],
+          });
+        }
+        return Response.json({ schemaVersion: 1, total: 1, assets: [summary()], nextCursor: null });
+      }),
+    );
+    renderGallery();
+
+    await screen.findByText('My Chair');
+    expect(await screen.findByAltText('My Chair sprite — Front · On')).toBeInTheDocument();
+    expect(screen.getByAltText('My Chair sprite — Front · Off')).toBeInTheDocument();
   });
 
   it('shows an empty state with no filters active', async () => {
