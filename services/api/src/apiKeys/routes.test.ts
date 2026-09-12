@@ -98,7 +98,7 @@ describe('POST /api/v1/moderation/api-keys', () => {
 
     const upload = await app.inject({
       method: 'POST',
-      url: '/api/v1/assets?assetKind=furniture&name=Revoked+Test&category=misc&discordUserId=111111111111111111',
+      url: '/api/v1/assets?discordUserId=111111111111111111',
       payload: await simpleAssetZip('REVOKED_KEY_TEST'),
       headers: { 'content-type': 'application/zip', 'x-api-key': value },
     });

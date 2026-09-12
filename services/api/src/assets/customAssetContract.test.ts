@@ -9,6 +9,7 @@
  */
 
 import {
+  customAssetCharacterManifestSchema,
   customAssetFurnitureManifestSchema,
   customAssetPetManifestSchema,
   furnitureCategories,
@@ -26,6 +27,7 @@ import { PET_HEIGHT, PET_WIDTH } from './decodePet.js';
 const ajv = withFormats(new Ajv2020({ allErrors: true, strict: false }));
 const validateFurnitureManifest: ValidateFunction = ajv.compile(customAssetFurnitureManifestSchema);
 const validatePetManifest: ValidateFunction = ajv.compile(customAssetPetManifestSchema);
+const validateCharacterManifest: ValidateFunction = ajv.compile(customAssetCharacterManifestSchema);
 
 /** Finds and parses the one manifest.json in a zip buffer, or undefined if there is none. */
 async function readManifest(zipBuffer: Buffer): Promise<unknown> {
@@ -124,17 +126,27 @@ describe('custom-asset-pet-manifest.schema.json', () => {
   });
 });
 
-describe('character zip (no manifest.json — PNG-only rule, see docs/custom-asset-zip-contract.md)', () => {
-  it('has no manifest.json and exactly one 112x96 PNG', async () => {
-    const zipBuffer = await characterZip();
+describe('custom-asset-character-manifest.schema.json', () => {
+  it('accepts characterZip (manifest.json + 112x96 PNG)', async () => {
+    const manifest = await readManifest(await characterZip('MY_CHARACTER', 'My Character'));
+    const ok = validateCharacterManifest(manifest);
+    expect(ok, JSON.stringify(validateCharacterManifest.errors)).toBe(true);
+  });
+
+  it('rejects a lowercase id', () => {
+    expect(validateCharacterManifest({ id: 'my_character', name: 'My Character' })).toBe(false);
+  });
+
+  it('rejects a missing name', () => {
+    expect(validateCharacterManifest({ id: 'MY_CHARACTER' })).toBe(false);
+  });
+});
+
+describe('character PNG dimensions match the documented frame grid', () => {
+  it('characterZip produces a 112x96 PNG', async () => {
+    const zipBuffer = await characterZip('MY_CHARACTER', 'My Character');
     const zip = await JSZip.loadAsync(zipBuffer);
-    const names = Object.keys(zip.files);
-
-    expect(names.some((name) => name.split('/').pop() === 'manifest.json')).toBe(false);
-
-    const pngPaths = names.filter((name) => name.toLowerCase().endsWith('.png'));
-    expect(pngPaths).toHaveLength(1);
-    const pngPath = pngPaths[0];
+    const pngPath = Object.keys(zip.files).find((name) => name.toLowerCase().endsWith('.png'));
     if (pngPath === undefined) throw new Error('unreachable');
     const entry = zip.file(pngPath);
     if (!entry) throw new Error('unreachable');

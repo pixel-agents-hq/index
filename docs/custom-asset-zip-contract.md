@@ -1,17 +1,17 @@
 # Custom-asset upload zip contract
 
-`POST /api/v1/assets` (#101, #105) accepts a zip file whose internal shape depends on
-`assetKind` (`furniture` | `character` | `pet`). This document is the producer-side
-contract for that shape — everything a tool generating these zips (starting with
+`POST /api/v1/assets` (#101, #105) accepts a zip file and detects its `assetKind`
+(`furniture` | `character` | `pet`) from the zip's own contents — the caller does not
+declare it (#105 follow-up). This document is the producer-side contract for each kind's
+shape — everything a tool generating these zips (starting with
 [pixel-art-mcp](https://github.com/NNTin/pixel-art-mcp)) needs to know to build one that
 pixel-index will accept, without reverse-engineering
 `services/api/src/assets/{decode.ts,decodeCharacter.ts,decodePet.ts,manifest.ts}`.
 
-It documents what is already accepted, and does not change the zip format. The furniture
-and pet manifest schemas below are also what `manifest.ts`/`decodePet.ts` actually
-compile and run at upload time (via `ajv`) — not a separate hand-written check that could
-drift from the published contract. (Character has no `manifest.json` at all, so there is
-nothing there to wire a schema to — see below.) A test
+It documents what is already accepted, and does not change the zip format. All three
+manifest schemas below are also what `manifest.ts`/`decodeCharacter.ts`/`decodePet.ts`
+actually compile and run at upload time (via `ajv`) — not a separate hand-written check
+that could drift from the published contract. A test
 (`services/api/src/assets/customAssetContract.test.ts`) additionally validates this
 repo's own fixture builders against the schemas, so a fixture the decode logic genuinely
 accepts can never quietly stop matching what's published here.
@@ -24,6 +24,7 @@ that pin, e.g.:
 ```text
 https://raw.githubusercontent.com/pixel-agents-hq/index/<commit-sha>/packages/layout-core/schema/custom-asset-furniture-manifest.schema.json
 https://raw.githubusercontent.com/pixel-agents-hq/index/<commit-sha>/packages/layout-core/schema/custom-asset-pet-manifest.schema.json
+https://raw.githubusercontent.com/pixel-agents-hq/index/<commit-sha>/packages/layout-core/schema/custom-asset-character-manifest.schema.json
 ```
 
 (or vendor them via a git submodule pinned to that same SHA — the mechanism this repo
@@ -53,12 +54,13 @@ it can never change out from under a consumer that already pinned it.
 
 ### Live discovery — `GET /api/v1/assets/schema/{kind}`
 
-A running instance also serves these same two schemas live, unauthenticated (`kind` is
-`furniture` or `pet`; `character` 404s, since it has no manifest to have a schema for):
+A running instance also serves these same schemas live, unauthenticated (`kind` is
+`furniture`, `pet`, or `character`):
 
 ```text
 GET /api/v1/assets/schema/furniture
 GET /api/v1/assets/schema/pet
+GET /api/v1/assets/schema/character
 ```
 
 The response body **is** the schema document itself — feed it straight to a validator
@@ -75,7 +77,17 @@ project's OpenAPI spec is generated from the registered Fastify routes), so the 
 files are one link away from the same spec pixel-art-mcp already reads for the rest of
 this API's shape.
 
-## Furniture (`assetKind=furniture`)
+## Kind detection
+
+`assetKind` is not a request parameter — pixel-index tries each kind's decoder in turn
+(furniture, then character, then pet) and uses whichever one the zip's contents actually
+satisfy. Furniture's manifest schema is structurally distinct (`category`/`type`/
+`members`), so it's tried first and fails fast on a genuine furniture upload with a bad
+manifest. Character and pet share the same minimal `{id, name}` manifest shape, so
+between those two the decisive signal is the PNG itself — its dimensions and frame
+layout — not the manifest.
+
+## Furniture (detected as `assetKind: "furniture"`)
 
 - A `manifest.json` located **anywhere** in the zip (root or nested — e.g.
   `assets/furniture/<ASSET_ID>/manifest.json`, pixel-art-mcp's own current export
@@ -101,13 +113,20 @@ this API's shape.
   `width`/`height`, and the uploaded PNG must match those exactly (`decodePng` in
   `zip.ts` rejects a mismatch rather than silently misreading the buffer).
 
-## Character (`assetKind=character`)
+## Character (detected as `assetKind: "character"`)
 
-No `manifest.json` — characters are identified purely positionally upstream (no id or
-name at all), so a manifest would have nothing correct to put in it. **A zip containing
-a `manifest.json` is rejected outright**, not treated as an optional extra.
-
-- Exactly one PNG in the zip.
+- `manifest.json` + one PNG alongside it (the "manifest.json anywhere, resolve everything
+  else relative to its directory" rule furniture and pet both use).
+- Manifest schema:
+  [`packages/layout-core/schema/custom-asset-character-manifest.schema.json`](../packages/layout-core/schema/custom-asset-character-manifest.schema.json)
+  — just `{ id, name }`, structurally identical to the pet manifest. Upstream itself has
+  no id/name for a character at all; pixel-index keeps both purely for its own identity
+  (`GET /api/v1/assets/:assetId`) and to avoid asking an uploader to retype a name that
+  isn't otherwise anywhere in the zip.
+- **A pet manifest and a character manifest are indistinguishable by shape alone** — kind
+  detection instead relies on each decode module's own PNG dimension/layout check (a
+  112×96 single-pose sheet vs. a 96×96 frame grid); see the "Kind detection" note below.
+- Exactly one PNG alongside the manifest.
 - PNG must be exactly **112×96 pixels**.
 - Frame grid (source of truth: `vendor/pixel-agents/core/src/assets/constants.ts` +
   `pngDecoder.ts`'s `decodeCharacterPng`, pinned at commit
@@ -118,7 +137,7 @@ a `manifest.json` is rejected outright**, not treated as an optional extra.
     wide → 7 × 16 = **112**.
   - `left` is not a row — it's derived at render time by horizontally flipping `right`.
 
-## Pet (`assetKind=pet`)
+## Pet (detected as `assetKind: "pet"`)
 
 - One directory containing exactly `manifest.json` and one PNG alongside it (the
   directory's own name is not part of the contract — pixel-index reads whichever

@@ -1,11 +1,15 @@
 /**
  * Turns an uploaded custom-character zip into what `custom_assets` stores.
  *
- * Characters have no manifest at all upstream — a character is one
- * `char_N.png` (112×96: 3 direction rows × 7 frames of 16×32 each), purely
- * positional (#105). This zip format mirrors that: exactly one PNG, no
- * `manifest.json` (rejected if present — the shape is deliberately
- * manifest-less, not "manifest optional").
+ * A character is `manifest.json` (just `{id, name}`, same minimal shape as a
+ * pet's) alongside one PNG (112×96: 3 direction rows × 7 frames of 16×32
+ * each), purely positional within the sheet (#105). The manifest gives
+ * pixel-index a stable id/name without asking the uploader to retype either —
+ * the same reasoning `decodePet.ts` documents for pets.
+ *
+ * The manifest is validated against the published
+ * `custom-asset-character-manifest.schema.json` contract, the same pattern
+ * `decodePet.ts` follows for `custom-asset-pet-manifest.schema.json`.
  *
  * The 112×96 frame-grid layout is a hand-kept LOCAL copy of
  * `vendor/pixel-agents/core/src/assets/pngDecoder.ts`'s `decodeCharacterPng`
@@ -16,11 +20,21 @@
  * upstream's character sprite-sheet layout ever changes.
  */
 
+import { customAssetCharacterManifestSchema, withFormats } from '@pixel-index/layout-core';
+import { Ajv2020, type ValidateFunction } from 'ajv/dist/2020.js';
 import JSZip from 'jszip';
 import { PNG } from 'pngjs';
 
+import { ApiError } from '../errors.js';
 import { facingAssetTags } from './tags.js';
-import { firstFreeId, type IdCollisionChecker, issue, pngPaths } from './zip.js';
+import {
+  findNamedTextEntry,
+  firstFreeId,
+  type IdCollisionChecker,
+  issue,
+  issuesFromAjvErrors,
+  pngPaths,
+} from './zip.js';
 
 const CHAR_FRAME_W = 16;
 const CHAR_FRAME_H = 32;
@@ -117,9 +131,11 @@ function decodeCharacterPng(buffer: Buffer, path: string): CharacterFrames {
   return result;
 }
 
+const ajv = withFormats(new Ajv2020({ allErrors: true, strict: false }));
+const validateCharacterManifest: ValidateFunction = ajv.compile(customAssetCharacterManifestSchema);
+
 export async function decodeCharacterZip(
   zipBuffer: Buffer,
-  name: string,
   isIdTaken: IdCollisionChecker,
 ): Promise<DecodedCharacterAsset> {
   let zip: JSZip;
@@ -129,14 +145,31 @@ export async function decodeCharacterZip(
     throw issue('/', 'Could not be read as a zip archive.');
   }
 
-  const manifestCandidate = Object.keys(zip.files).find((entry) => entry.split('/').pop() === 'manifest.json');
-  if (manifestCandidate) {
-    throw issue('/', 'A custom character must not include a manifest.json — it is identified by its PNG alone.');
-  }
+  const found = await findNamedTextEntry(zip, 'manifest.json');
+  if (!found) throw issue('/', 'The zip does not contain a manifest.json.');
+  const { dir, text } = found;
 
-  const pngs = pngPaths(zip);
-  if (pngs.length === 0) throw issue('/', 'The zip does not contain a PNG.');
-  if (pngs.length > 1) throw issue('/', 'The zip must contain exactly one PNG.');
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw issue('/manifest.json', 'manifest.json is not valid JSON.');
+  }
+  if (!validateCharacterManifest(parsed)) {
+    throw ApiError.validation(
+      issuesFromAjvErrors(validateCharacterManifest.errors).map((i) => ({
+        code: 'meta.schema' as const,
+        path: i.path,
+        message: i.message,
+      })),
+      'Invalid manifest.json.',
+    );
+  }
+  const { id: requestedId, name } = parsed as { id: string; name: string };
+
+  const pngs = pngPaths(zip, dir);
+  if (pngs.length === 0) throw issue('/', `No PNG was found alongside manifest.json in "${dir || '.'}".`);
+  if (pngs.length > 1) throw issue('/', `Expected exactly one PNG alongside manifest.json in "${dir || '.'}".`);
   const path = pngs[0];
   if (path === undefined) throw issue('/', 'The zip does not contain a PNG.');
   const entry = zip.file(path);
@@ -145,21 +178,12 @@ export async function decodeCharacterZip(
   const buffer = await entry.async('nodebuffer');
   const frames = decodeCharacterPng(buffer, `/${path}`);
 
-  // Pixel-index needs a stable id to address this row by (GET
-  // /api/v1/assets/:assetId) even though upstream's own characters have no
-  // id or name at all — derived from the display name, same character set
-  // furniture ids already require.
-  const slug = name
-    .toUpperCase()
-    .replace(/[^A-Z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '');
-  const requestedAssetId = slug === '' || !/^[A-Z]/.test(slug) ? `CHARACTER_${slug || 'UNNAMED'}` : slug;
-  const assetId = firstFreeId(requestedAssetId, isIdTaken);
+  const assetId = firstFreeId(requestedId, isIdTaken);
 
   return {
     assetKind: 'character',
     assetId,
-    requestedAssetId,
+    requestedAssetId: requestedId,
     name,
     category: null,
     manifest: [{ id: assetId, name, label: name, width: CHARACTER_WIDTH, height: CHARACTER_HEIGHT }],

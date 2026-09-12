@@ -20,4 +20,5 @@ export const layoutSchema = read('layout.schema.json');
 export const metaSchema = read('meta.schema.json');
 export const customAssetFurnitureManifestSchema = read('custom-asset-furniture-manifest.schema.json');
 export const customAssetPetManifestSchema = read('custom-asset-pet-manifest.schema.json');
+export const customAssetCharacterManifestSchema = read('custom-asset-character-manifest.schema.json');
 export { SCHEMA_DIR };

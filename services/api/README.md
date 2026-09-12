@@ -54,8 +54,8 @@ src/assets/manifest.ts   the furniture-only external-asset manifest schema + fla
                          why it can't be a cross-package import)
 src/assets/decode.ts     furniture: unzips an upload, validates the manifest, decodes PNGs,
                          assigns the final (possibly auto-suffixed) id
-src/assets/decodeCharacter.ts  character (#105): one manifest-less 112×96 PNG, hand-ported
-                         frame-grid slicing from pixel-agents' own pngDecoder.ts
+src/assets/decodeCharacter.ts  character (#105): `{id,name}` manifest + one 112×96 PNG,
+                         hand-ported frame-grid slicing from pixel-agents' own pngDecoder.ts
 src/assets/decodePet.ts  pet (#105): `{id,name}` manifest + one 96×96 PNG, same hand-ported-slicing approach
 src/assets/tags.ts       orientation/static-animated/interactable — real classifiers derived from
                          a manifest's flattened leaves, denormalised into custom_assets.tags

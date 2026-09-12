@@ -9,7 +9,7 @@ const noneTaken = () => false;
 describe('decodePetZip', () => {
   it('decodes a manifest.json + 96×96 PNG at <id>/', async () => {
     const zip = await petZip('MY_PET', 'Bubbles');
-    const decoded = await decodePetZip(zip, 'Bubbles', noneTaken);
+    const decoded = await decodePetZip(zip, noneTaken);
 
     expect(decoded.assetKind).toBe('pet');
     expect(decoded.assetId).toBe('MY_PET');
@@ -32,7 +32,7 @@ describe('decodePetZip', () => {
   it('auto-suffixes a colliding id rather than rejecting the upload', async () => {
     const zip = await petZip('MY_PET', 'Bubbles');
     const isTaken = (id: string) => id === 'MY_PET';
-    const decoded = await decodePetZip(zip, 'Bubbles', isTaken);
+    const decoded = await decodePetZip(zip, isTaken);
     expect(decoded.assetId).toBe('MY_PET_2');
     expect(decoded.requestedAssetId).toBe('MY_PET');
   });
@@ -41,12 +41,12 @@ describe('decodePetZip', () => {
     const zip = new JSZip();
     zip.file('MY_PET/pet.png', tinyPng(96, 96));
     const buffer = await zip.generateAsync({ type: 'nodebuffer' });
-    await expect(decodePetZip(buffer, 'Nothing', noneTaken)).rejects.toMatchObject({ statusCode: 422 });
+    await expect(decodePetZip(buffer, noneTaken)).rejects.toMatchObject({ statusCode: 422 });
   });
 
   it('rejects a manifest with an invalid id', async () => {
     const zip = await petZip('lowercase-not-allowed', 'Bubbles');
-    await expect(decodePetZip(zip, 'Bubbles', noneTaken)).rejects.toMatchObject({ statusCode: 422 });
+    await expect(decodePetZip(zip, noneTaken)).rejects.toMatchObject({ statusCode: 422 });
   });
 
   it('rejects a manifest missing name', async () => {
@@ -54,12 +54,12 @@ describe('decodePetZip', () => {
     zip.file('MY_PET/manifest.json', JSON.stringify({ id: 'MY_PET' }));
     zip.file('MY_PET/pet.png', tinyPng(96, 96));
     const buffer = await zip.generateAsync({ type: 'nodebuffer' });
-    await expect(decodePetZip(buffer, 'Bubbles', noneTaken)).rejects.toMatchObject({ statusCode: 422 });
+    await expect(decodePetZip(buffer, noneTaken)).rejects.toMatchObject({ statusCode: 422 });
   });
 
   it('rejects a PNG whose dimensions are not 96×96', async () => {
     const zip = await petZip('MY_PET', 'Bubbles', { pngWidth: 16, pngHeight: 16 });
-    await expect(decodePetZip(zip, 'Bubbles', noneTaken)).rejects.toMatchObject({ statusCode: 422 });
+    await expect(decodePetZip(zip, noneTaken)).rejects.toMatchObject({ statusCode: 422 });
   });
 
   it('rejects more than one PNG alongside the manifest', async () => {
@@ -68,7 +68,7 @@ describe('decodePetZip', () => {
     zip.file('MY_PET/pet.png', tinyPng(96, 96));
     zip.file('MY_PET/extra.png', tinyPng(96, 96));
     const buffer = await zip.generateAsync({ type: 'nodebuffer' });
-    await expect(decodePetZip(buffer, 'Bubbles', noneTaken)).rejects.toMatchObject({ statusCode: 422 });
+    await expect(decodePetZip(buffer, noneTaken)).rejects.toMatchObject({ statusCode: 422 });
   });
 
   it('rejects a pet PNG over 512 KiB, even though it is well under the whole-zip cap (#107)', async () => {
@@ -80,6 +80,6 @@ describe('decodePetZip', () => {
     const oversizedPng = Buffer.concat([tinyPng(96, 96), Buffer.alloc(513 * 1024)]);
     zip.file('MY_PET/pet.png', oversizedPng);
     const buffer = await zip.generateAsync({ type: 'nodebuffer' });
-    await expect(decodePetZip(buffer, 'Bubbles', noneTaken)).rejects.toMatchObject({ statusCode: 422 });
+    await expect(decodePetZip(buffer, noneTaken)).rejects.toMatchObject({ statusCode: 422 });
   });
 });

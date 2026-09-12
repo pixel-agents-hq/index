@@ -65,7 +65,7 @@ function submit(query: string, zip: Buffer, headers: Record<string, string> = {}
 describe('POST /api/v1/assets — authentication', () => {
   it('is impossible anonymously', async () => {
     const zip = await simpleAssetZip('ANON_CHAIR');
-    const response = await submit('assetKind=furniture&name=Chair&category=chairs', zip);
+    const response = await submit('', zip);
     expect(response.statusCode).toBe(401);
   });
 });
@@ -73,8 +73,8 @@ describe('POST /api/v1/assets — authentication', () => {
 describe('POST /api/v1/assets — the happy path', () => {
   it('publishes immediately, no moderator review', async () => {
     const { accessToken, user } = await tokenFor({ username: 'uploader' });
-    const zip = await simpleAssetZip('HAPPY_CHAIR');
-    const response = await submit('assetKind=furniture&name=Happy+Chair&category=chairs', zip, {
+    const zip = await simpleAssetZip('HAPPY_CHAIR', { name: 'Happy Chair', category: 'chairs' });
+    const response = await submit('', zip, {
       authorization: `Bearer ${accessToken}`,
     });
     expect(response.statusCode).toBe(201);
@@ -91,14 +91,14 @@ describe('POST /api/v1/assets — the happy path', () => {
 
   it('auto-suffixes a second upload that reuses the same id', async () => {
     const { accessToken: firstToken } = await tokenFor({ username: 'first-uploader' });
-    const first = await submit('assetKind=furniture&name=Dup&category=chairs', await simpleAssetZip('DUP_CHAIR'), {
+    const first = await submit('', await simpleAssetZip('DUP_CHAIR'), {
       authorization: `Bearer ${firstToken}`,
     });
     expect(first.statusCode).toBe(201);
     expect(first.json<PublicCustomAssetDetail>().assetId).toBe('DUP_CHAIR');
 
     const { accessToken: secondToken } = await tokenFor({ username: 'second-uploader' });
-    const second = await submit('assetKind=furniture&name=Dup+Two&category=chairs', await simpleAssetZip('DUP_CHAIR'), {
+    const second = await submit('', await simpleAssetZip('DUP_CHAIR'), {
       authorization: `Bearer ${secondToken}`,
     });
     expect(second.statusCode).toBe(201);
@@ -112,7 +112,7 @@ describe('POST /api/v1/assets — the happy path', () => {
       const { accessToken } = await tokenFor({ username: 'oversized-uploader' });
       const response = await tinyApp.inject({
         method: 'POST',
-        url: '/api/v1/assets?assetKind=furniture&name=Big&category=misc',
+        url: '/api/v1/assets',
         payload: await simpleAssetZip('TOO_BIG'),
         headers: { 'content-type': 'application/zip', authorization: `Bearer ${accessToken}` },
       });
@@ -125,10 +125,10 @@ describe('POST /api/v1/assets — the happy path', () => {
   it('rejects an invalid manifest with field-level issues', async () => {
     const { accessToken } = await tokenFor({ username: 'bad-manifest-uploader' });
     const zip = new JSZip();
-    zip.file('manifest.json', JSON.stringify({ id: 'not valid id', type: 'asset' }));
+    zip.file('manifest.json', JSON.stringify({ id: 'not valid id', type: 'asset', category: 'misc' }));
     const buffer = await zip.generateAsync({ type: 'nodebuffer' });
 
-    const response = await submit('assetKind=furniture&name=Bad&category=misc', buffer, {
+    const response = await submit('', buffer, {
       authorization: `Bearer ${accessToken}`,
     });
     expect(response.statusCode).toBe(422);
@@ -136,28 +136,23 @@ describe('POST /api/v1/assets — the happy path', () => {
   });
 });
 
-describe('POST /api/v1/assets — assetKind (#105)', () => {
-  it('rejects an upload with no assetKind at all', async () => {
-    const { accessToken } = await tokenFor({ username: 'no-kind-uploader' });
-    const response = await submit('name=Chair&category=chairs', await simpleAssetZip('NO_KIND_CHAIR'), {
+describe('POST /api/v1/assets — assetKind auto-detection from zip contents (#105 follow-up)', () => {
+  it('detects a pet from a manifest.json without a category field', async () => {
+    const { accessToken } = await tokenFor({ username: 'pet-uploader' });
+    const response = await submit('', await petZip('SUBMIT_TEST_PET', 'Bubbles'), {
       authorization: `Bearer ${accessToken}`,
     });
-    expect(response.statusCode).toBe(400);
+    expect(response.statusCode).toBe(201);
+    const body = response.json<PublicCustomAssetDetail>();
+    expect(body.assetKind).toBe('pet');
+    expect(body.category).toBeNull();
+    expect(body.assetId).toBe('SUBMIT_TEST_PET');
+    expect(body.name).toBe('Bubbles');
   });
 
-  it('rejects category alongside assetKind=character', async () => {
-    const { accessToken } = await tokenFor({ username: 'confused-character-uploader' });
-    const response = await submit(
-      'assetKind=character&name=My+Character&category=misc',
-      await characterZip(),
-      { authorization: `Bearer ${accessToken}` },
-    );
-    expect(response.statusCode).toBe(400);
-  });
-
-  it('publishes a custom character with a null category', async () => {
+  it("detects a character from its own manifest.json + a 112×96 PNG (no category, no manifest 'category' field)", async () => {
     const { accessToken } = await tokenFor({ username: 'character-uploader' });
-    const response = await submit('assetKind=character&name=My+Character', await characterZip(), {
+    const response = await submit('', await characterZip('MY_CHARACTER', 'My Character'), {
       authorization: `Bearer ${accessToken}`,
     });
     expect(response.statusCode).toBe(201);
@@ -165,45 +160,29 @@ describe('POST /api/v1/assets — assetKind (#105)', () => {
     expect(body.assetKind).toBe('character');
     expect(body.category).toBeNull();
     expect(body.assetId).toBe('MY_CHARACTER');
+    expect(body.name).toBe('My Character');
   });
 
-  it('publishes a custom pet with a null category', async () => {
-    const { accessToken } = await tokenFor({ username: 'pet-uploader' });
-    const response = await submit(
-      'assetKind=pet&name=Bubbles',
-      await petZip('SUBMIT_TEST_PET', 'Bubbles'),
-      { authorization: `Bearer ${accessToken}` },
-    );
-    expect(response.statusCode).toBe(201);
-    const body = response.json<PublicCustomAssetDetail>();
-    expect(body.assetKind).toBe('pet');
-    expect(body.category).toBeNull();
-    expect(body.assetId).toBe('SUBMIT_TEST_PET');
+  it('rejects a zip that matches none of the three kinds with a combined error', async () => {
+    const { accessToken } = await tokenFor({ username: 'garbage-uploader' });
+    const zip = new JSZip();
+    zip.file('readme.txt', 'not an asset');
+    const buffer = await zip.generateAsync({ type: 'nodebuffer' });
+    const response = await submit('', buffer, { authorization: `Bearer ${accessToken}` });
+    expect(response.statusCode).toBe(422);
   });
 
-  it('rejects assetKind=furniture with no category', async () => {
-    const { accessToken } = await tokenFor({ username: 'no-category-uploader' });
-    const response = await submit(
-      'assetKind=furniture&name=Chair',
-      await simpleAssetZip('NO_CATEGORY_CHAIR'),
-      { authorization: `Bearer ${accessToken}` },
-    );
-    expect(response.statusCode).toBe(400);
-  });
-
-  it('rejects a category no bundled vendor manifest actually uses (#101 follow-up)', async () => {
-    // The accepted category set is generated from furnitureCategories(),
-    // derived from the pinned vendor's real bundled manifests — 'storage'
-    // is declared in upstream's UI palette but unused by any shipped asset,
-    // so it must not validate here even though it used to (back when this
-    // enum was a hand-typed 7-value list).
+  it('rejects a furniture category no bundled vendor manifest actually uses (#101 follow-up)', async () => {
+    // The furniture manifest schema's category enum is generated from
+    // furnitureCategories() against the pinned vendor's real bundled
+    // manifests — 'storage' is declared in upstream's UI palette but unused
+    // by any shipped asset, so a manifest claiming it must still fail,
+    // now via the manifest's own schema validation rather than a query
+    // param check.
     const { accessToken } = await tokenFor({ username: 'storage-category-uploader' });
-    const response = await submit(
-      'assetKind=furniture&name=Shelf&category=storage',
-      await simpleAssetZip('STORAGE_SHELF'),
-      { authorization: `Bearer ${accessToken}` },
-    );
-    expect(response.statusCode).toBe(400);
+    const zip = await simpleAssetZip('STORAGE_SHELF', { category: 'storage' });
+    const response = await submit('', zip, { authorization: `Bearer ${accessToken}` });
+    expect(response.statusCode).toBe(422);
   });
 });
 
@@ -211,7 +190,7 @@ describe('POST /api/v1/assets — X-Api-Key (bot-originated) uploads', () => {
   it('publishes and attributes to the given discordUserId, creating a stub user', async () => {
     const key = await mintApiKey('animator-bot');
     const response = await submit(
-      'assetKind=furniture&name=Bot+Chair&category=chairs&discordUserId=222222222222222222',
+      'discordUserId=222222222222222222',
       await simpleAssetZip('BOT_CHAIR'),
       { 'x-api-key': key },
     );
@@ -223,7 +202,7 @@ describe('POST /api/v1/assets — X-Api-Key (bot-originated) uploads', () => {
 
   it('rejects an unknown or malformed key', async () => {
     const response = await submit(
-      'assetKind=furniture&name=Bot+Chair&category=chairs&discordUserId=333333333333333333',
+      'discordUserId=333333333333333333',
       await simpleAssetZip('BAD_KEY_CHAIR'),
       { 'x-api-key': 'not-a-real-key' },
     );
@@ -232,7 +211,7 @@ describe('POST /api/v1/assets — X-Api-Key (bot-originated) uploads', () => {
 
   it('requires discordUserId alongside a valid API key', async () => {
     const key = await mintApiKey('animator-bot-no-discord-id');
-    const response = await submit('assetKind=furniture&name=Bot+Chair&category=chairs', await simpleAssetZip('NO_DISCORD_ID'), {
+    const response = await submit('', await simpleAssetZip('NO_DISCORD_ID'), {
       'x-api-key': key,
     });
     expect(response.statusCode).toBe(400);
@@ -241,7 +220,7 @@ describe('POST /api/v1/assets — X-Api-Key (bot-originated) uploads', () => {
   it('rejects discordUserId on an ordinary web (Bearer) upload', async () => {
     const { accessToken } = await tokenFor({ username: 'confused-web-uploader' });
     const response = await submit(
-      'assetKind=furniture&name=Chair&category=chairs&discordUserId=444444444444444444',
+      'discordUserId=444444444444444444',
       await simpleAssetZip('MIXED_AUTH_CHAIR'),
       { authorization: `Bearer ${accessToken}` },
     );
@@ -251,47 +230,16 @@ describe('POST /api/v1/assets — X-Api-Key (bot-originated) uploads', () => {
   it('reuses the same stub user across two uploads by the same Discord id', async () => {
     const key = await mintApiKey('animator-bot-reuse');
     const first = await submit(
-      'assetKind=furniture&name=First&category=chairs&discordUserId=555555555555555555',
+      'discordUserId=555555555555555555',
       await simpleAssetZip('REUSE_ONE'),
       { 'x-api-key': key },
     );
     const second = await submit(
-      'assetKind=furniture&name=Second&category=chairs&discordUserId=555555555555555555',
+      'discordUserId=555555555555555555',
       await simpleAssetZip('REUSE_TWO'),
       { 'x-api-key': key },
     );
     expect(first.json<PublicCustomAssetDetail>().author.discordId).toBe('555555555555555555');
     expect(second.json<PublicCustomAssetDetail>().author.discordId).toBe('555555555555555555');
-  });
-});
-
-describe('POST /api/v1/assets — category enum with an unreadable upstream (#101 follow-up)', () => {
-  it('boots the server rather than crashing route registration, and does not 400 an arbitrary category', async () => {
-    // The category enum is generated from furnitureCategories(config.upstreamDir)
-    // at route-registration time — an entirely missing upstream must degrade
-    // (empty/unconstrained category, same "degrade rather than crash" contract
-    // /api/v1/meta's own upstreamPin() read already has), not take down server
-    // boot for every other route too.
-    const brokenConfig = testConfig({
-      writeRateLimit: { max: 1000, windowMs: 60_000 },
-      upstreamDir: '/nonexistent/pixel-agents',
-    });
-    const brokenApp = await buildServer({ config: brokenConfig, pool: fakePool, db: harness.db });
-    try {
-      const { accessToken } = await tokenFor({ username: 'broken-upstream-uploader' });
-      const response = await brokenApp.inject({
-        method: 'POST',
-        url: '/api/v1/assets?assetKind=furniture&name=Chair&category=anything-at-all',
-        payload: await simpleAssetZip('BROKEN_UPSTREAM_CHAIR'),
-        headers: { 'content-type': 'application/zip', authorization: `Bearer ${accessToken}` },
-      });
-      // Not a 400 — the schema itself must not reject the category. (It may
-      // still fail later, e.g. a 500 from decode's own separate upstream
-      // read — that's a pre-existing, unrelated limitation, not what this
-      // test covers.)
-      expect(response.statusCode).not.toBe(400);
-    } finally {
-      await brokenApp.close();
-    }
   });
 });
