@@ -50,11 +50,37 @@ export function AssetFilterBar({
   const categories = useFurnitureCategories();
   const selectClass = 'border border-border bg-canvas px-2 py-1.5 text-ink';
 
+  /**
+   * Category, orientation and interactable are structurally furniture-only
+   * (services/api's `assets/tags.ts`: a character/pet manifest has no
+   * category, orientation, or `state` field at all) — hidden and disabled
+   * for pet/character so a visitor never lands on a filter combination that
+   * silently yields nothing. Animation is left alone: it's always
+   * `['animated']` for character/pet (never structurally absent), so
+   * selecting 'static' there is a meaningful, if unhelpful, zero-result
+   * answer rather than a silent no-op.
+   */
+  const furnitureOnlyControlsApply = filters.assetKind !== 'pet' && filters.assetKind !== 'character';
+
+  function handleAssetKindChange(value: string) {
+    const assetKind = (value || null) as AssetFilters['assetKind'];
+    const clearFurnitureOnly = assetKind === 'pet' || assetKind === 'character';
+    onChange({
+      ...filters,
+      assetKind,
+      ...(clearFurnitureOnly ? { category: null, orientation: [], interactable: null } : {}),
+    });
+  }
+
+  function handleCategoryChange(value: string) {
+    const category = value || null;
+    onChange({ ...filters, category, assetKind: category ? 'furniture' : filters.assetKind });
+  }
+
   function toggleOrientation(tag: string) {
-    const next = filters.orientation.includes(tag)
-      ? filters.orientation.filter((t) => t !== tag)
-      : [...filters.orientation, tag];
-    onChange({ ...filters, orientation: next });
+    const wasActive = filters.orientation.includes(tag);
+    const next = wasActive ? filters.orientation.filter((t) => t !== tag) : [...filters.orientation, tag];
+    onChange({ ...filters, orientation: next, assetKind: wasActive ? filters.assetKind : 'furniture' });
   }
 
   function toggleAnimation(tag: string) {
@@ -71,9 +97,7 @@ export function AssetFilterBar({
           Kind
           <select
             value={filters.assetKind ?? ''}
-            onChange={(event) =>
-              onChange({ ...filters, assetKind: (event.target.value || null) as AssetFilters['assetKind'] })
-            }
+            onChange={(event) => handleAssetKindChange(event.target.value)}
             className={selectClass}
           >
             <option value="">Any</option>
@@ -83,21 +107,23 @@ export function AssetFilterBar({
           </select>
         </label>
 
-        <label className="flex items-center gap-1.5 text-sm text-muted">
-          Category
-          <select
-            value={filters.category ?? ''}
-            onChange={(event) => onChange({ ...filters, category: event.target.value || null })}
-            className={selectClass}
-          >
-            <option value="">Any</option>
-            {categories.map((category) => (
-              <option key={category} value={category}>
-                {category}
-              </option>
-            ))}
-          </select>
-        </label>
+        {furnitureOnlyControlsApply && (
+          <label className="flex items-center gap-1.5 text-sm text-muted">
+            Category
+            <select
+              value={filters.category ?? ''}
+              onChange={(event) => handleCategoryChange(event.target.value)}
+              className={selectClass}
+            >
+              <option value="">Any</option>
+              {categories.map((category) => (
+                <option key={category} value={category}>
+                  {category}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
 
         <label className="flex items-center gap-1.5 text-sm text-muted">
           Source
@@ -114,36 +140,40 @@ export function AssetFilterBar({
           </select>
         </label>
 
-        <label className="flex items-center gap-1.5 text-sm text-muted">
-          Interactable
-          <select
-            value={filters.interactable === null ? '' : String(filters.interactable)}
-            onChange={(event) =>
-              onChange({
-                ...filters,
-                interactable: event.target.value === '' ? null : event.target.value === 'true',
-              })
-            }
-            className={selectClass}
-          >
-            <option value="">Any</option>
-            <option value="true">Interactable</option>
-            <option value="false">Not interactable</option>
-          </select>
-        </label>
+        {furnitureOnlyControlsApply && (
+          <label className="flex items-center gap-1.5 text-sm text-muted">
+            Interactable
+            <select
+              value={filters.interactable === null ? '' : String(filters.interactable)}
+              onChange={(event) =>
+                onChange({
+                  ...filters,
+                  interactable: event.target.value === '' ? null : event.target.value === 'true',
+                })
+              }
+              className={selectClass}
+            >
+              <option value="">Any</option>
+              <option value="true">Interactable</option>
+              <option value="false">Not interactable</option>
+            </select>
+          </label>
+        )}
       </div>
 
-      <fieldset className="flex flex-wrap items-center gap-1.5">
-        <legend className="mb-1 w-full text-sm text-muted sm:w-auto sm:mb-0 sm:mr-1">Orientation</legend>
-        {ORIENTATION_TAGS.map((tag) => (
-          <TagToggleButton
-            key={tag}
-            label={tag}
-            active={filters.orientation.includes(tag)}
-            onClick={() => toggleOrientation(tag)}
-          />
-        ))}
-      </fieldset>
+      {furnitureOnlyControlsApply && (
+        <fieldset className="flex flex-wrap items-center gap-1.5">
+          <legend className="mb-1 w-full text-sm text-muted sm:w-auto sm:mb-0 sm:mr-1">Orientation</legend>
+          {ORIENTATION_TAGS.map((tag) => (
+            <TagToggleButton
+              key={tag}
+              label={tag}
+              active={filters.orientation.includes(tag)}
+              onClick={() => toggleOrientation(tag)}
+            />
+          ))}
+        </fieldset>
+      )}
 
       <fieldset className="flex flex-wrap items-center gap-1.5">
         <legend className="mb-1 w-full text-sm text-muted sm:w-auto sm:mb-0 sm:mr-1">Animation</legend>
