@@ -150,6 +150,7 @@ function toRow(decoded: DecodedAsset, zipBuffer: Buffer, commit: string): schema
     category: decoded.category,
     manifest: decoded.manifest,
     sprites: decoded.sprites,
+    tags: decoded.tags,
     // The synthetic zip's own bytes — the actual decode input, meaningful
     // and traceable, not a duplicate of the vendor tree's raw files.
     rawZip: zipBuffer,

@@ -12,7 +12,13 @@ export interface PublicCustomAssetSummary {
   /** `'builtin'` for the bundled Pixel Agents catalog synced by `builtinSync.ts`, `'custom'` for an upload. */
   source: schema.CustomAsset['source'];
   author: PublicAuthor;
-  variantCount: number;
+  /**
+   * Real, user-facing classifiers (`assets/tags.ts`) — orientation, static/
+   * animated, interactable. Replaces `variantCount` (a count of internal
+   * flattened-manifest leaves, meaningful to nothing but the decode
+   * pipeline), removed from this API rather than kept alongside it.
+   */
+  tags: string[];
   createdAt: string;
   updatedAt: string;
   files: {
@@ -47,7 +53,7 @@ export function toSummary(asset: schema.CustomAsset, author: schema.User | null)
     category: asset.category,
     source: asset.source,
     author: assetAuthor(author),
-    variantCount: (asset.manifest as unknown[]).length,
+    tags: asset.tags,
     createdAt: asset.createdAt.toISOString(),
     updatedAt: asset.updatedAt.toISOString(),
     files: files(asset.assetId),

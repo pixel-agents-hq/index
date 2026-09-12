@@ -94,3 +94,46 @@ describe('listCustomAssets pagination', () => {
     expect(seen.length).toBe(expected.length);
   });
 });
+
+describe('listCustomAssets tag facet filter', () => {
+  it('ORs within a facet and ANDs across the facets present', async () => {
+    harness = await createTestDatabase();
+    const { db } = harness;
+
+    await db.insert(schema.customAssets).values([
+      furnitureRow('FRONT_STATIC', 'custom', { tags: ['front', 'static'] }),
+      furnitureRow('BACK_STATIC', 'custom', { tags: ['back', 'static'] }),
+      furnitureRow('SIDE_ANIMATED', 'custom', { tags: ['side', 'animated'] }),
+      furnitureRow('FRONT_ANIMATED_INTERACTABLE', 'custom', {
+        tags: ['front', 'static', 'animated', 'interactable'],
+      }),
+    ]);
+
+    // OR within the orientation facet: front OR back, regardless of animation status.
+    const orientation = await listCustomAssets(db, {
+      filters: { orientation: ['front', 'back'] },
+      limit: 24,
+    });
+    expect(orientation.rows.map((r) => r.assetId).sort()).toEqual(
+      ['FRONT_STATIC', 'BACK_STATIC', 'FRONT_ANIMATED_INTERACTABLE'].sort(),
+    );
+
+    // AND across facets: front (orientation) AND animated (animation status)
+    // — narrows further than either facet alone, not an OR of the two.
+    const combined = await listCustomAssets(db, {
+      filters: { orientation: ['front'], animation: ['animated'] },
+      limit: 24,
+    });
+    expect(combined.rows.map((r) => r.assetId)).toEqual(['FRONT_ANIMATED_INTERACTABLE']);
+
+    // interactable: true only matches the one asset carrying that tag.
+    const interactable = await listCustomAssets(db, { filters: { interactable: true }, limit: 24 });
+    expect(interactable.rows.map((r) => r.assetId)).toEqual(['FRONT_ANIMATED_INTERACTABLE']);
+
+    // interactable: false is every asset lacking the tag.
+    const notInteractable = await listCustomAssets(db, { filters: { interactable: false }, limit: 24 });
+    expect(notInteractable.rows.map((r) => r.assetId).sort()).toEqual(
+      ['FRONT_STATIC', 'BACK_STATIC', 'SIDE_ANIMATED'].sort(),
+    );
+  });
+});

@@ -31,6 +31,7 @@ import JSZip from 'jszip';
 import { PNG } from 'pngjs';
 
 import { ApiError } from '../errors.js';
+import { facingAssetTags } from './tags.js';
 import { findNamedTextEntry, firstFreeId, type IdCollisionChecker, issue, issuesFromAjvErrors, pngPaths } from './zip.js';
 
 const PET_FRAME_W_SMALL = 16;
@@ -67,6 +68,8 @@ export interface DecodedPetAsset {
   category: null;
   manifest: [PetManifestEntry];
   sprites: Record<string, PetFrames>;
+  /** Always `['animated']` — see `tags.ts`'s file header for why. */
+  tags: string[];
 }
 
 function sanitizePngBuffer(buf: Buffer): Buffer {
@@ -202,5 +205,6 @@ export async function decodePetZip(
     category: null,
     manifest: [{ id: assetId, name, width: PET_WIDTH, height: PET_HEIGHT }],
     sprites: { [assetId]: frames },
+    tags: facingAssetTags(),
   };
 }

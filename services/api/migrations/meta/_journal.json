@@ -120,6 +120,13 @@
       "when": 1789125672403,
       "tag": "0016_pixel_agents_system_user",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1789196212989,
+      "tag": "0017_custom_asset_tags",
+      "breakpoints": true
     }
   ]
 }

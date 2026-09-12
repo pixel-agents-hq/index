@@ -1,10 +1,11 @@
 /** SQL for custom assets: list (newest, optional category/author filter), detail, insert-time lookups. */
 
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, arrayContains, arrayOverlaps, desc, eq, not, sql } from 'drizzle-orm';
 
 import type { AnyDatabase } from '../db/client.js';
 import * as schema from '../db/schema.js';
 import { type Cursor, decodeCursor, encodeCursor, timestampMicros } from '../layouts/cursor.js';
+import { INTERACTABLE_TAG } from './tags.js';
 
 export interface ListCustomAssetsFilters {
   assetKind?: schema.CustomAsset['assetKind'];
@@ -12,6 +13,16 @@ export interface ListCustomAssetsFilters {
   source?: schema.CustomAsset['source'];
   /** users.id — resolved from a Discord id by the caller, same convention as layouts. */
   author?: string;
+  /**
+   * The tag facet filter (`assets/tags.ts`). Each present facet is OR'd
+   * internally ("front OR back") and the facets present are AND'd together
+   * ("(front OR back) AND animated") — see `buildConditions` below for why
+   * this is deliberately not layouts' single all-tags-ANDed `tags` filter.
+   */
+  orientation?: string[];
+  animation?: string[];
+  /** Has (true) or lacks (false) the `interactable` tag. */
+  interactable?: boolean;
 }
 
 export interface ListCustomAssetsOptions {
@@ -29,12 +40,38 @@ export interface ListCustomAssetsResult {
 /** #101 ships one sort order (newest) — this is the literal `layouts/cursor.ts` accepts. */
 const SORT = 'newest' as const;
 
+/**
+ * The tag facet filter's semantics, chosen deliberately over copying either
+ * existing tag-filter precedent in this codebase:
+ *
+ * - NOT layouts' `tags` filter (`layouts/query.ts`) — "a layout must have
+ *   EVERY requested tag" is a single flat AND-across-everything bag that
+ *   doesn't distinguish facets, which is wrong here: selecting 'front' AND
+ *   'back' under that model would require one asset to somehow be both at
+ *   once, always returning nothing.
+ * - Instead: these three facets (orientation, animation status,
+ *   interactable) are OR'd *within* a facet ("front OR back" — matches
+ *   the owner's own "it is possible to have multiple tags... not an
+ *   exclusive filter") and AND'd *across* facets that are actually present
+ *   ("(front OR back) AND animated" narrows further, same as every other
+ *   filter in this list already composes).
+ */
 function buildConditions(filters: ListCustomAssetsFilters) {
   const conditions = [];
   if (filters.assetKind) conditions.push(eq(schema.customAssets.assetKind, filters.assetKind));
   if (filters.category) conditions.push(eq(schema.customAssets.category, filters.category));
   if (filters.source) conditions.push(eq(schema.customAssets.source, filters.source));
   if (filters.author) conditions.push(eq(schema.customAssets.authorUserId, filters.author));
+  if (filters.orientation && filters.orientation.length > 0) {
+    conditions.push(arrayOverlaps(schema.customAssets.tags, filters.orientation));
+  }
+  if (filters.animation && filters.animation.length > 0) {
+    conditions.push(arrayOverlaps(schema.customAssets.tags, filters.animation));
+  }
+  if (filters.interactable !== undefined) {
+    const hasTag = arrayContains(schema.customAssets.tags, [INTERACTABLE_TAG]);
+    conditions.push(filters.interactable ? hasTag : not(hasTag));
+  }
   return conditions;
 }
 
