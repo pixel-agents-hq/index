@@ -64,7 +64,11 @@ export function AssetFilterBar({
 
   function handleAssetKindChange(value: string) {
     const assetKind = (value || null) as AssetFilters['assetKind'];
-    const clearFurnitureOnly = assetKind === 'pet' || assetKind === 'character';
+    // Not just pet/character: picking a category or orientation auto-selects
+    // 'furniture' (below), so stepping back to 'Any' has to be the exact
+    // reverse of that — otherwise Kind reads "Any" while the result set stays
+    // silently narrowed to furniture by the still-applied category/orientation.
+    const clearFurnitureOnly = assetKind !== 'furniture';
     onChange({
       ...filters,
       assetKind,

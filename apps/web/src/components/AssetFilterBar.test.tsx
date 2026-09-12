@@ -111,6 +111,29 @@ describe('AssetFilterBar', () => {
     });
   });
 
+  it('clears Category, Orientation and Interactable when Kind switches back to Any', async () => {
+    const onChange = vi.fn();
+    const filters = {
+      ...DEFAULT_ASSET_FILTERS,
+      assetKind: 'furniture' as const,
+      category: 'chairs',
+      orientation: ['front'],
+      interactable: true,
+    };
+    render(<AssetFilterBar filters={filters} onChange={onChange} />);
+    await waitForCategoriesLoaded();
+
+    fireEvent.change(screen.getByLabelText('Kind'), { target: { value: '' } });
+
+    expect(onChange).toHaveBeenCalledWith({
+      ...filters,
+      assetKind: null,
+      category: null,
+      orientation: [],
+      interactable: null,
+    });
+  });
+
   it.each(['pet', 'character'] as const)(
     'hides Category, Orientation and Interactable when Kind is %s, but keeps Animation',
     (assetKind) => {
