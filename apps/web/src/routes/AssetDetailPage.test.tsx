@@ -14,7 +14,6 @@ function detail(overrides: Record<string, unknown> = {}) {
     source: 'custom',
     author: { discordId: null, username: 'someone', displayName: 'someone', avatarUrl: null },
     tags: ['static'],
-    variantCount: 1,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-02-01T00:00:00.000Z',
     files: { sprite: '/api/v1/assets/MY_CHAIR/sprite.png' },

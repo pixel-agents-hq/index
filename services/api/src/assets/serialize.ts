@@ -14,20 +14,11 @@ export interface PublicCustomAssetSummary {
   author: PublicAuthor;
   /**
    * Real, user-facing classifiers (`assets/tags.ts`) — orientation, static/
-   * animated, interactable. The primary descriptor a gallery card shows now;
-   * see `variantCount`'s own doc comment for why that field stays but is no
-   * longer it.
+   * animated, interactable. Replaces `variantCount` (a count of internal
+   * flattened-manifest leaves, meaningful to nothing but the decode
+   * pipeline), removed from this API rather than kept alongside it.
    */
   tags: string[];
-  /**
-   * A count of internal flattened-manifest leaves (#101) — an
-   * implementation-pipeline artifact, not a meaningful user-facing property
-   * (one furniture item is one asset to a viewer, regardless of how many
-   * rotation/state/animation leaves it decodes into). Kept in the public API
-   * for backward compatibility rather than removed outright; `tags` above is
-   * the primary classifier `AssetCard`/`AssetDetailPage` now lead with.
-   */
-  variantCount: number;
   createdAt: string;
   updatedAt: string;
   files: {
@@ -63,7 +54,6 @@ export function toSummary(asset: schema.CustomAsset, author: schema.User | null)
     source: asset.source,
     author: assetAuthor(author),
     tags: asset.tags,
-    variantCount: (asset.manifest as unknown[]).length,
     createdAt: asset.createdAt.toISOString(),
     updatedAt: asset.updatedAt.toISOString(),
     files: files(asset.assetId),

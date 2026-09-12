@@ -892,12 +892,12 @@ can never disagree with the title and description it indexes.
 
 **`custom_assets.tags` follows the same denormalisation precedent.** Orientation
 (`front`/`back`/`left`/`right`/`side`), `static`/`animated` and `interactable` are real,
-user-facing classifiers — replacing `variantCount` (a count of internal
-flattened-manifest leaves, meaningful to nothing but the decode pipeline) as the primary
-thing a gallery card shows. Every one of them is fully derivable from `manifest`
-(`assets/tags.ts`'s `furnitureTags()`/`facingAssetTags()`), so the alternative — computing
-them at read time in `serialize.ts`, the same place `variantCount` is computed today —
-was real: no migration, no backfill. It loses the one thing that matters most about the
+user-facing classifiers — replacing the removed `variantCount` field, which was just a
+count of internal flattened-manifest leaves, meaningful to nothing but the decode
+pipeline. Every one of them is fully derivable from `manifest` (`assets/tags.ts`'s
+`furnitureTags()`/`facingAssetTags()`), so a read-time-only alternative — computing them
+in `serialize.ts` on every request, the way `variantCount` used to be — was real: no
+migration, no backfill. It loses the one thing that matters most about the
 new requirement, though: the tags need to be filterable, multi-select, across three
 distinct facets (`GET /api/v1/assets?orientation=...&animation=...&interactable=...`,
 `assets/query.ts`), and a read-time-only computation can't turn that into an indexed SQL

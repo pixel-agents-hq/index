@@ -1,9 +1,9 @@
 /**
- * Real, user-facing semantic tags for a custom asset — replaces `variantCount`
- * as the primary classifier a gallery card shows (variantCount is just a
- * count of internal flattened-manifest leaves, an implementation-pipeline
- * artifact, not something a viewer looking at one furniture item can
- * interpret). See the PR description for the full design discussion.
+ * Real, user-facing semantic tags for a custom asset — replaces the removed
+ * `variantCount` field, which was just a count of internal
+ * flattened-manifest leaves, an implementation-pipeline artifact, not
+ * something a viewer looking at one furniture item could interpret. See the
+ * PR description for the full design discussion.
  *
  * Furniture-only facets (orientation, interactable) stay furniture-only
  * because both would otherwise tag every single character/pet identically —

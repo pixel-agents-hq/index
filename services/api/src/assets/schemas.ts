@@ -19,10 +19,8 @@ export const customAssetSummarySchema = {
     source: { type: 'string', enum: ['builtin', 'custom'] },
     author: { $ref: 'PublicAuthor#' },
     // Real, user-facing classifiers (assets/tags.ts) — orientation,
-    // static/animated, interactable. See serialize.ts's doc comment for why
-    // variantCount stays alongside this rather than being replaced by it.
+    // static/animated, interactable. Replaces variantCount, removed.
     tags: { type: 'array', items: { type: 'string' } },
-    variantCount: { type: 'integer' },
     createdAt: { type: 'string', format: 'date-time' },
     updatedAt: { type: 'string', format: 'date-time' },
     files: filesSchema,
@@ -35,7 +33,6 @@ export const customAssetSummarySchema = {
     'source',
     'author',
     'tags',
-    'variantCount',
     'createdAt',
     'updatedAt',
     'files',

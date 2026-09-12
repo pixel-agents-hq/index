@@ -80,8 +80,6 @@ export function AssetDetailPage() {
         <dd className="font-mono text-xs">{asset.assetId}</dd>
         <dt>{asset.category ? 'Category' : 'Kind'}</dt>
         <dd>{asset.category ?? asset.assetKind}</dd>
-        <dt>Variants</dt>
-        <dd>{asset.variantCount}</dd>
         <dt>Last updated</dt>
         <dd>{dateFormatter.format(new Date(asset.updatedAt))}</dd>
       </dl>
