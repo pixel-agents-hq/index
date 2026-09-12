@@ -36,7 +36,7 @@ import { isUniqueViolation } from '../layouts/metadata.js';
 import { recordModerationAction } from '../moderation/audit.js';
 import { writeRateLimitConfig } from '../rateLimit.js';
 import { type DecodedFurnitureAsset, decodeFurnitureZip } from './decode.js';
-import { type DecodedCharacterAsset, decodeCharacterZip } from './decodeCharacter.js';
+import { decodeCharacterZip,type DecodedCharacterAsset } from './decodeCharacter.js';
 import { type DecodedPetAsset, decodePetZip } from './decodePet.js';
 import { existingCustomAssetIds } from './query.js';
 import { submitCustomAssetQuerySchema } from './schemas.js';
@@ -57,7 +57,7 @@ type DecodedAsset = DecodedFurnitureAsset | DecodedCharacterAsset | DecodedPetAs
  * clearly here rather than falling through), then character, then pet.
  */
 async function decodeAsset(zipBuffer: Buffer, isIdTaken: IdCollisionChecker): Promise<DecodedAsset> {
-  const attempts: Array<() => Promise<DecodedAsset>> = [
+  const attempts: (() => Promise<DecodedAsset>)[] = [
     () => decodeFurnitureZip(zipBuffer, isIdTaken),
     () => decodeCharacterZip(zipBuffer, isIdTaken),
     () => decodePetZip(zipBuffer, isIdTaken),
