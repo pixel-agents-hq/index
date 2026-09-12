@@ -39,6 +39,19 @@ export function AssetDetailPage() {
         · published {dateFormatter.format(new Date(asset.createdAt))}
       </p>
 
+      {asset.tags.length > 0 && (
+        <ul className="m-0 mt-2 flex flex-wrap gap-1.5 p-0">
+          {asset.tags.map((tag) => (
+            <li
+              key={tag}
+              className="rounded border border-border px-2 py-0.5 text-xs capitalize text-subtle"
+            >
+              {tag}
+            </li>
+          ))}
+        </ul>
+      )}
+
       {/*
         Every published custom asset is already in the editor's palette (see
         live-office/assets.ts's catalog merge) — this is just a convenience

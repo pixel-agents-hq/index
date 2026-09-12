@@ -102,6 +102,16 @@ export function registerAssetRoutes(app: FastifyInstance, { db }: AssetRoutesDep
         author = row.id;
       }
 
+      // Same comma-separated convention as /api/v1/layouts?tags= (layouts/routes.ts).
+      const orientation = query.orientation
+        ?.split(',')
+        .map((t) => t.trim())
+        .filter((t) => t.length > 0);
+      const animation = query.animation
+        ?.split(',')
+        .map((t) => t.trim())
+        .filter((t) => t.length > 0);
+
       const { rows, total, nextCursor } = await listCustomAssets(db, {
         limit: query.limit,
         ...(query.cursor ? { cursor: query.cursor } : {}),
@@ -110,6 +120,9 @@ export function registerAssetRoutes(app: FastifyInstance, { db }: AssetRoutesDep
           ...(query.category ? { category: query.category } : {}),
           ...(query.source ? { source: query.source } : {}),
           ...(author ? { author } : {}),
+          ...(orientation && orientation.length > 0 ? { orientation } : {}),
+          ...(animation && animation.length > 0 ? { animation } : {}),
+          ...(query.interactable !== undefined ? { interactable: query.interactable === 'true' } : {}),
         },
       });
 

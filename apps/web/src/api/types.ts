@@ -283,6 +283,21 @@ export interface AssetSummary {
   /** `'builtin'` for the catalog bundled with Pixel Agents itself, `'custom'` for a community upload. */
   source: 'builtin' | 'custom';
   author: PublicAuthor;
+  /**
+   * Real, user-facing classifiers — orientation (furniture only:
+   * front/back/left/right/side), static/animated (every asset has at least
+   * one, can have both), interactable (furniture only). The primary
+   * descriptor `AssetCard` now leads with; see `variantCount` for why that
+   * field still exists alongside it.
+   */
+  tags: string[];
+  /**
+   * A count of internal flattened-manifest leaves — an implementation-pipeline
+   * artifact, not a meaningful user-facing property (one furniture item is
+   * one asset to a viewer, however many rotation/state/animation leaves it
+   * decodes into). Kept for API backward compatibility; `tags` above is the
+   * classifier the UI actually shows now.
+   */
   variantCount: number;
   createdAt: string;
   updatedAt: string;
@@ -324,6 +339,10 @@ export interface ListAssetsParams {
   source?: 'builtin' | 'custom';
   /** A Discord user id (snowflake), same convention as ListLayoutsParams.author. */
   author?: string;
+  /** The tag facet filter (assets/tags.ts server-side) — OR within each facet, AND across the facets present. */
+  orientation?: string[];
+  animation?: string[];
+  interactable?: boolean;
 }
 
 export interface SubmitAssetParams {

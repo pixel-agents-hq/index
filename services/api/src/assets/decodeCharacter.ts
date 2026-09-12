@@ -19,6 +19,7 @@
 import JSZip from 'jszip';
 import { PNG } from 'pngjs';
 
+import { facingAssetTags } from './tags.js';
 import { firstFreeId, type IdCollisionChecker, issue, pngPaths } from './zip.js';
 
 const CHAR_FRAME_W = 16;
@@ -50,6 +51,8 @@ export interface DecodedCharacterAsset {
   category: null;
   manifest: [CharacterManifestEntry];
   sprites: Record<string, CharacterFrames>;
+  /** Always `['animated']` — see `tags.ts`'s file header for why. */
+  tags: string[];
 }
 
 /**
@@ -161,5 +164,6 @@ export async function decodeCharacterZip(
     category: null,
     manifest: [{ id: assetId, name, label: name, width: CHARACTER_WIDTH, height: CHARACTER_HEIGHT }],
     sprites: { [assetId]: frames },
+    tags: facingAssetTags(),
   };
 }

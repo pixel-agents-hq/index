@@ -24,6 +24,7 @@ function summary(overrides: Record<string, unknown> = {}) {
     category: 'chairs',
     source: 'custom',
     author: { discordId: null, username: 'someone', displayName: 'someone', avatarUrl: null },
+    tags: ['static'],
     variantCount: 1,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
@@ -57,7 +58,8 @@ describe('AssetsGallery', () => {
     expect(screen.getByText('Loading assets…')).toBeInTheDocument();
     expect(await screen.findByText('My Chair')).toBeInTheDocument();
     expect(screen.getByText('by someone')).toBeInTheDocument();
-    expect(screen.getByText('chairs · 1 variant')).toBeInTheDocument();
+    expect(screen.getByText('chairs', { selector: 'p' })).toBeInTheDocument();
+    expect(screen.getByText('static', { selector: 'li' })).toBeInTheDocument();
   });
 
   it('shows an empty state with no filters active', async () => {
@@ -172,6 +174,42 @@ describe('AssetsGallery', () => {
     expect(await screen.findByText('My Pet')).toBeInTheDocument();
     expect(screen.queryByText('My Chair')).not.toBeInTheDocument();
     expect(lastUrl).toContain('assetKind=pet');
+  });
+
+  it('multi-selects orientation tags and ANDs them with the animation facet', async () => {
+    let lastUrl = '';
+    stubAssetsFetch((url) => {
+      lastUrl = url;
+      return Response.json({ schemaVersion: 1, total: 1, assets: [summary()], nextCursor: null });
+    });
+    renderGallery();
+    await screen.findByText('My Chair');
+
+    // Two clicks in the orientation facet — both stay pressed (OR within a
+    // facet), not exclusive toggle-radio behaviour.
+    fireEvent.click(screen.getByRole('button', { name: 'front' }));
+    fireEvent.click(screen.getByRole('button', { name: 'back' }));
+    await waitFor(() => expect(lastUrl).toContain('orientation=front%2Cback'));
+    expect(screen.getByRole('button', { name: 'front' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'back' })).toHaveAttribute('aria-pressed', 'true');
+
+    // Adding the animation facet ANDs with the orientation facet already set.
+    fireEvent.click(screen.getByRole('button', { name: 'animated' }));
+    await waitFor(() => expect(lastUrl).toContain('animation=animated'));
+    expect(lastUrl).toContain('orientation=front%2Cback');
+  });
+
+  it('filters by interactable via the tri-state select', async () => {
+    let lastUrl = '';
+    stubAssetsFetch((url) => {
+      lastUrl = url;
+      return Response.json({ schemaVersion: 1, total: 1, assets: [summary()], nextCursor: null });
+    });
+    renderGallery();
+    await screen.findByText('My Chair');
+
+    fireEvent.change(screen.getByLabelText('Interactable'), { target: { value: 'true' } });
+    await waitFor(() => expect(lastUrl).toContain('interactable=true'));
   });
 
   it('loads the next page via "Load more" and appends', async () => {

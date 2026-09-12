@@ -57,7 +57,9 @@ src/assets/decode.ts     furniture: unzips an upload, validates the manifest, de
 src/assets/decodeCharacter.ts  character (#105): one manifest-less 112×96 PNG, hand-ported
                          frame-grid slicing from pixel-agents' own pngDecoder.ts
 src/assets/decodePet.ts  pet (#105): `{id,name}` manifest + one 96×96 PNG, same hand-ported-slicing approach
-src/assets/query.ts      SQL: list (newest, assetKind/category/author filter), detail,
+src/assets/tags.ts       orientation/static-animated/interactable — real classifiers derived from
+                         a manifest's flattened leaves, denormalised into custom_assets.tags
+src/assets/query.ts      SQL: list (newest, assetKind/category/author/tag-facet filter), detail,
                          id-collision lookups, furniture-only catalog merge
 src/assets/serialize.ts  DB row -> public JSON shape, mirroring layouts/serialize.ts
 src/assets/schemas.ts    JSON Schemas for the custom-asset routes
@@ -887,6 +889,27 @@ rather than reimplemented, via `occupiedBounds()`. Backfilled the same way as
 
 **`search_vector` is a generated column**, not something the application maintains, so it
 can never disagree with the title and description it indexes.
+
+**`custom_assets.tags` follows the same denormalisation precedent.** Orientation
+(`front`/`back`/`left`/`right`/`side`), `static`/`animated` and `interactable` are real,
+user-facing classifiers — replacing `variantCount` (a count of internal
+flattened-manifest leaves, meaningful to nothing but the decode pipeline) as the primary
+thing a gallery card shows. Every one of them is fully derivable from `manifest`
+(`assets/tags.ts`'s `furnitureTags()`/`facingAssetTags()`), so the alternative — computing
+them at read time in `serialize.ts`, the same place `variantCount` is computed today —
+was real: no migration, no backfill. It loses the one thing that matters most about the
+new requirement, though: the tags need to be filterable, multi-select, across three
+distinct facets (`GET /api/v1/assets?orientation=...&animation=...&interactable=...`,
+`assets/query.ts`), and a read-time-only computation can't turn that into an indexed SQL
+condition — every request would need to decode every row's manifest just to test it
+against the filter. Denormalising into a real `text[]` column, GIN-indexed
+(`custom_assets_tags_idx`), keeps that a real index scan (`arrayOverlaps`/`arrayContains`),
+consistent with why `layouts.furnitureCount`/`seatCount`/`visibleCols` are stored rather
+than computed per request. Applied on every write (`submit.ts`, `builtinSync.ts`); rows
+written before this column existed are corrected by `db/backfill-asset-tags.ts`, which
+recomputes tags from each row's already-stored `manifest` (no re-decode needed, since
+every field `tags.ts` reads is already in that column), the same shape and same
+`docker-entrypoint.sh` wiring as `backfill-seats.ts`/`backfill-visible-bounds.ts`.
 
 ## The audit log is append-only in the database
 

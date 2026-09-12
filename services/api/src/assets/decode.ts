@@ -27,6 +27,7 @@ import {
   type ManifestNode,
   validateManifestShape,
 } from './manifest.js';
+import { furnitureTags } from './tags.js';
 import { decodePng, findNamedTextEntry, firstFreeId, type IdCollisionChecker, issue } from './zip.js';
 
 export interface DecodedFurnitureAsset {
@@ -39,6 +40,8 @@ export interface DecodedFurnitureAsset {
   /** One entry per flattened variant, `id` rewritten to the assigned root id's namespace. */
   manifest: FlattenedAsset[];
   sprites: Record<string, string[][]>;
+  /** See `tags.ts` — the real, user-facing classifier that replaces `variantCount`. */
+  tags: string[];
 }
 
 function rootNode(manifest: FurnitureManifest): ManifestNode {
@@ -154,5 +157,6 @@ export async function decodeFurnitureZip(
     category,
     manifest: renamed,
     sprites,
+    tags: furnitureTags(renamed),
   };
 }

@@ -426,6 +426,22 @@ export const customAssets = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: 'restrict' }),
 
+    /**
+     * Real, user-facing semantic tags — orientation (`front`/`back`/`left`/
+     * `right`/`side`, furniture only), `static`/`animated` (every asset has
+     * at least one, can have both) and `interactable` (furniture only).
+     * Computed by `assets/tags.ts` from `manifest` and denormalised here
+     * (same reasoning as `layouts.furnitureCount`/`seatCount`, #48/#55) so
+     * the multi-select facet filter (`GET /api/v1/assets`) is a real
+     * `&&`/`@>` index scan, not an application-side scan over every row.
+     * Applied on every write (`submit.ts`, `builtinSync.ts`); rows written
+     * before this column existed are corrected by `db/backfill-asset-tags.ts`.
+     */
+    tags: text('tags')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+
     /** See `assetSourceEnum`'s doc comment. */
     source: assetSourceEnum('source').notNull(),
     /**
@@ -464,6 +480,9 @@ export const customAssets = pgTable(
     index('custom_assets_category_idx').on(table.category),
     index('custom_assets_kind_idx').on(table.assetKind),
     index('custom_assets_source_idx').on(table.source),
+    // GIN so the facet filter's `&&`/`@>` conditions (query.ts) are index
+    // scans, not sequential scans over every asset.
+    index('custom_assets_tags_idx').using('gin', table.tags),
   ],
 );
 

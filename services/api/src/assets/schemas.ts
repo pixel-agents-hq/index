@@ -18,6 +18,10 @@ export const customAssetSummarySchema = {
     // 'builtin' for the bundled Pixel Agents catalog (synced by builtinSync.ts), 'custom' for an upload.
     source: { type: 'string', enum: ['builtin', 'custom'] },
     author: { $ref: 'PublicAuthor#' },
+    // Real, user-facing classifiers (assets/tags.ts) — orientation,
+    // static/animated, interactable. See serialize.ts's doc comment for why
+    // variantCount stays alongside this rather than being replaced by it.
+    tags: { type: 'array', items: { type: 'string' } },
     variantCount: { type: 'integer' },
     createdAt: { type: 'string', format: 'date-time' },
     updatedAt: { type: 'string', format: 'date-time' },
@@ -30,6 +34,7 @@ export const customAssetSummarySchema = {
     'category',
     'source',
     'author',
+    'tags',
     'variantCount',
     'createdAt',
     'updatedAt',
@@ -68,6 +73,19 @@ export const listCustomAssetsQuerySchema = {
     source: { type: 'string', enum: ['builtin', 'custom'] },
     // A Discord user id (snowflake), same convention as /api/v1/layouts?author=.
     author: { type: 'string' },
+    // The tag facet filter (assets/tags.ts): OR within each facet ("front OR
+    // back"), AND across the three facets present — see query.ts's
+    // buildConditions for the semantics and why this is deliberately NOT
+    // layouts' single all-tags-are-ANDed model.
+    orientation: {
+      type: 'string',
+      description: 'Comma-separated orientation tags (front/back/left/right/side); matches ANY of them.',
+    },
+    animation: {
+      type: 'string',
+      description: 'Comma-separated of "static" and/or "animated"; matches ANY of them.',
+    },
+    interactable: { type: 'string', enum: ['true', 'false'] },
   },
 } as const;
 

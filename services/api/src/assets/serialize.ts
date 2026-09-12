@@ -12,6 +12,21 @@ export interface PublicCustomAssetSummary {
   /** `'builtin'` for the bundled Pixel Agents catalog synced by `builtinSync.ts`, `'custom'` for an upload. */
   source: schema.CustomAsset['source'];
   author: PublicAuthor;
+  /**
+   * Real, user-facing classifiers (`assets/tags.ts`) — orientation, static/
+   * animated, interactable. The primary descriptor a gallery card shows now;
+   * see `variantCount`'s own doc comment for why that field stays but is no
+   * longer it.
+   */
+  tags: string[];
+  /**
+   * A count of internal flattened-manifest leaves (#101) — an
+   * implementation-pipeline artifact, not a meaningful user-facing property
+   * (one furniture item is one asset to a viewer, regardless of how many
+   * rotation/state/animation leaves it decodes into). Kept in the public API
+   * for backward compatibility rather than removed outright; `tags` above is
+   * the primary classifier `AssetCard`/`AssetDetailPage` now lead with.
+   */
   variantCount: number;
   createdAt: string;
   updatedAt: string;
@@ -47,6 +62,7 @@ export function toSummary(asset: schema.CustomAsset, author: schema.User | null)
     category: asset.category,
     source: asset.source,
     author: assetAuthor(author),
+    tags: asset.tags,
     variantCount: (asset.manifest as unknown[]).length,
     createdAt: asset.createdAt.toISOString(),
     updatedAt: asset.updatedAt.toISOString(),
