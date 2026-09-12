@@ -59,6 +59,22 @@ describe('AssetPoseMontage', () => {
     expect(screen.getByAltText('PC sprite — Back')).toHaveAttribute('src', framePng('back'));
   });
 
+  it('shows each pose\'s label as visible text, not just alt text', async () => {
+    stubFrames(() =>
+      Response.json({
+        schemaVersion: 1,
+        poses: [
+          { key: 'down', label: 'Down', frames: [framePng('d')] },
+          { key: 'typing-down', label: 'Typing · Down', frames: [framePng('t')] },
+        ],
+      }),
+    );
+    render(<AssetPoseMontage assetId="CHAR_0" fallbackSrc={FALLBACK_SRC} alt="Char 0 sprite" />);
+
+    await screen.findByText('Down');
+    expect(screen.getByText('Typing · Down')).toBeInTheDocument();
+  });
+
   it('animates a multi-frame pose independently of a single-frame pose beside it', async () => {
     stubFrames(() =>
       Response.json({

@@ -130,13 +130,45 @@ describe('buildAssetPoses — character', () => {
     const frames: CharacterFrames = { down: frameRow('D'), up: frameRow('U'), right: frameRow('R') };
     const poses = buildAssetPoses({ assetKind: 'character', manifest: [{ id: 'CHAR_0' }], sprites: { CHAR_0: frames } });
 
-    expect(poses.map((p) => p.key)).toEqual(['down', 'up', 'right', 'left']);
     const right = poses.find((p) => p.key === 'right');
     const left = poses.find((p) => p.key === 'left');
     expect(left?.mirror).toBe(true);
     expect(left?.frames).toEqual(right?.frames);
     // Only the walk-cycle slice (3 of the 7 frames), not the typing/reading frames too.
     expect(right?.frames).toHaveLength(3);
+  });
+
+  it('also gives a typing pose and a reading pose per direction, sliced from the same 7-frame row', () => {
+    const frames: CharacterFrames = { down: frameRow('D'), up: frameRow('U'), right: frameRow('R') };
+    const poses = buildAssetPoses({ assetKind: 'character', manifest: [{ id: 'CHAR_0' }], sprites: { CHAR_0: frames } });
+
+    expect(poses.map((p) => p.key)).toEqual([
+      'down',
+      'up',
+      'right',
+      'left',
+      'typing-down',
+      'typing-up',
+      'typing-right',
+      'typing-left',
+      'reading-down',
+      'reading-up',
+      'reading-right',
+      'reading-left',
+    ]);
+
+    const typingRight = poses.find((p) => p.key === 'typing-right');
+    const typingLeft = poses.find((p) => p.key === 'typing-left');
+    expect(typingRight?.label).toBe('Typing · Right');
+    expect(typingRight?.frames).toHaveLength(2);
+    expect(typingLeft?.mirror).toBe(true);
+    expect(typingLeft?.frames).toEqual(typingRight?.frames);
+
+    const typingDown = poses.find((p) => p.key === 'typing-down');
+    const readingDown = poses.find((p) => p.key === 'reading-down');
+    expect(readingDown?.label).toBe('Reading · Down');
+    // Frames [3,4] (typing) and [5,6] (reading) — distinct from each other and from walk's [0-2].
+    expect(readingDown?.frames).not.toEqual(typingDown?.frames);
   });
 });
 
@@ -155,9 +187,15 @@ describe('buildAssetPoses — pet', () => {
     };
     const poses = buildAssetPoses({ assetKind: 'pet', manifest: [{ id: 'GITCAT' }], sprites: { GITCAT: petFrames } });
 
-    expect(poses.map((p) => p.key)).toEqual(['down', 'up', 'right', 'left']);
+    expect(poses.map((p) => p.key)).toEqual(['down', 'up', 'right', 'left', 'idle-down', 'idle-up']);
     const left = poses.find((p) => p.key === 'left');
     expect(left?.mirror).toBe(true);
+
+    const idleDown = poses.find((p) => p.key === 'idle-down');
+    expect(idleDown?.label).toBe('Idle · Down');
+    expect(idleDown?.frames).toHaveLength(3);
+    // Idle is its own stored frame set, not a slice of the walk frames.
+    expect(idleDown?.frames).not.toEqual(poses.find((p) => p.key === 'down')?.frames);
   });
 
   it('returns nothing for an id with no matching sprite entry', () => {
