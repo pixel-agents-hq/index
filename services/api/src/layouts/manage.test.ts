@@ -7,6 +7,7 @@ import { signAccessToken } from '../auth/tokens.js';
 import { one } from '../db/rows.js';
 import * as schema from '../db/schema.js';
 import { createTestDatabase, type Harness } from '../db/test-support/harness.js';
+import type { EnvelopeBody } from '../errors.js';
 import { buildServer } from '../server.js';
 import { testConfig } from '../test-support/config.js';
 import { insertLayout, insertUser } from '../test-support/layouts.js';
@@ -76,6 +77,38 @@ async function ownedLayout(overrides: Parameters<typeof insertLayout>[1] = {}) {
     ...overrides,
   });
   return { user, accessToken, layout };
+}
+
+/** A published custom-furniture asset, shaped like `assets/submit.ts` would insert. */
+async function insertCustomFurniture(assetId: string) {
+  const author = await insertUser(harness.db, { username: `author-of-${assetId}` });
+  await harness.db.insert(schema.customAssets).values({
+    assetKind: 'furniture',
+    assetId,
+    requestedAssetId: assetId,
+    name: assetId,
+    category: 'chairs',
+    manifest: [
+      {
+        id: assetId,
+        name: assetId,
+        label: assetId,
+        category: 'chairs',
+        file: `${assetId}.png`,
+        width: 16,
+        height: 16,
+        footprintW: 1,
+        footprintH: 1,
+        isDesk: false,
+        canPlaceOnWalls: false,
+        groupId: assetId,
+      },
+    ],
+    sprites: { [assetId]: Array.from({ length: 16 }, () => Array.from({ length: 16 }, () => '#ff00ff')) },
+    rawZip: Buffer.from('fake zip'),
+    authorUserId: author.id,
+    source: 'custom',
+  });
 }
 
 async function getLayoutById(id: string): Promise<schema.Layout> {
@@ -514,6 +547,22 @@ describe('PUT /api/v1/layouts/:slug/layout — owner replace', () => {
     stubRenderer();
     const response = await put(layout.slug, validLayoutJson({ tiles: [0, 0] }), accessToken);
     expect(response.statusCode).toBe(422);
+  });
+
+  it('rejects a replacement referencing published custom furniture, same as an unknown id (#120)', async () => {
+    await insertCustomFurniture('REPLACE_CUSTOM_CHAIR');
+    const { accessToken, layout } = await ownedLayout();
+    stubRenderer();
+    const response = await put(
+      layout.slug,
+      validLayoutJson({ furniture: [{ type: 'REPLACE_CUSTOM_CHAIR', col: 0, row: 0 }] }),
+      accessToken,
+    );
+    expect(response.statusCode).toBe(422);
+    const issue = response
+      .json<EnvelopeBody>()
+      .issues?.find((i) => i.code === 'layout.furniture.unknown');
+    expect(issue?.message).toContain('REPLACE_CUSTOM_CHAIR');
   });
 
   it('rejects replacing with content byte-identical to a different public layout', async () => {

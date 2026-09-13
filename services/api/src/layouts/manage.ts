@@ -30,7 +30,6 @@
 import {
   type Layout,
   layoutStats,
-  mergeFurnitureCatalog,
   sha256,
   SLUG_RE,
   validateLayout,
@@ -52,7 +51,7 @@ import type { RequestSchemas } from '../http.js';
 import { recordModerationAction } from '../moderation/audit.js';
 import { writeRateLimitConfig } from '../rateLimit.js';
 import { requestPreview } from '../renderer/client.js';
-import { customAssetsForLayout, furnitureCatalogEntries } from '../renderer/customAssets.js';
+import { customAssetsForLayout } from '../renderer/customAssets.js';
 import {
   isUniqueViolation,
   MAX_DESCRIPTION_LENGTH,
@@ -455,15 +454,11 @@ export function registerManageRoutes(app: FastifyInstance, { config, db, upstrea
           throw ApiError.badRequest('Body is not valid JSON.');
         }
 
-        // #101: extend the catalog with whatever custom furniture this
-        // layout references — see submit.ts's identical comment.
+        // #120: custom (uploaded) furniture is no longer accepted in a
+        // published layout — see submit.ts's identical comment.
         const customAssets = await customAssetsForLayout(db, parsedLayout);
-        const catalog =
-          furnitureCatalogEntries(customAssets).length > 0
-            ? mergeFurnitureCatalog(validator.catalog, furnitureCatalogEntries(customAssets))
-            : validator.catalog;
         const validation = validateLayout(parsedLayout, {
-          catalog,
+          catalog: validator.catalog,
           requiredRevision: validator.requiredRevision,
           upstreamVersion: pin.version,
         });
