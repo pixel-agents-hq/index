@@ -198,9 +198,20 @@ custom-asset catalog (`GET /api/v1/assets/catalog`, unfiltered) and merge it int
 build-time static bundle, for both the read-only `/layouts/:slug` viewer and the
 general `/editor`. It no longer does either: the palette every editor session sees is
 the built-in catalog alone, keeping the web bundle's furniture surface bounded
-regardless of how many custom assets have been uploaded. A future single-asset
-inspection editor (#121) will load exactly one custom asset through its own, narrower
-path — not this function, and not the unfiltered catalog endpoint.
+regardless of how many custom assets have been uploaded.
+
+**#121 added the narrower path.** `loadLiveOfficeAssets(assetId?)` takes an optional
+single asset id — used only by the single-asset inspection editor below — and fetches
+it from a dedicated, per-kind endpoint (`GET /api/v1/assets/:assetId/catalog`, 404 for
+an unknown or builtin id), never the unfiltered catalog endpoint. Furniture merges into
+the catalog/sprites pair same as the old full merge, just scoped to one asset;
+character/pet append onto the built-in character/pet template arrays instead, since
+those were never merged into the browser editor before #120 either (only furniture
+was). Appending a character has no visible effect on its own — edit mode never rendered
+any character at all before #121 — so #121 also added one fixed, non-adjustable mock
+agent to edit mode (`PreviewApp.tsx`'s `EDIT_MODE_AGENT_ID`), whose palette is forced to
+the appended character when one was requested, and otherwise picks a random built-in one
+like `pickDiversePalette()` always has.
 
 ### `services/renderer/src/render.ts` — network-level interception (C)
 
@@ -216,11 +227,16 @@ pet sprite fetches.
 
 `/` → `/layouts/` redirect; `/assets/` (`AssetsGallery.tsx`), `/assets/:id`
 (`AssetDetailPage.tsx`), `/assets/submit` (`AssetSubmitPage.tsx`) mirror the layout
-routes' list → detail → editor shape exactly as decided. Since #120, the editor's
-palette is built-ins-only by default (B no longer merges anything in), so "open in
-editor" from `/assets/:id` is a plain link to a *blank, built-ins-only* canvas — it
-does not carry that specific asset in. #121 is the planned replacement: a per-asset
-inspection editor that loads exactly the one requested custom asset.
+routes' list → detail → editor shape exactly as decided. Since #120, the general
+editor's palette is built-ins-only by default (B no longer merges anything in). #121
+added the per-asset alternative: `/assets/:id`'s "Open in editor" link now points at
+`/editor?asset=<assetId>` — the same shared `LayoutEditorPage.tsx`/`live-office.html`
+infrastructure as the general editor, plus exactly the one requested asset (any kind,
+any source — including built-ins, symmetrically with #119's download button). It is
+inspection-only: "Continue to publish" and "Save changes" are absent from the page
+entirely in this mode, not merely disabled, and nothing drawn there can be saved.
+Deliberately unrelated to #102 (pre-publish preview rendering quality for
+`/assets/submit`) — this is post-publish inspection of an asset that already exists.
 
 ## Extending the gallery to built-in assets
 

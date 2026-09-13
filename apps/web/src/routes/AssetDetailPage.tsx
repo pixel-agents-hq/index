@@ -53,15 +53,23 @@ export function AssetDetailPage() {
       )}
 
       {/*
-        #120: the general editor no longer merges the custom-asset catalog
-        in by default, so this link opens a built-ins-only canvas — it does
-        NOT carry this specific asset in yet. #121 replaces it with a
-        single-asset inspection editor; until then this is a plain,
-        ungated link, same as before, just without the "already in the
-        palette" guarantee it used to have.
+        #121: a single-asset inspection editor — the general `/editor` loads
+        the built-in catalog only (#120), but `?asset=<id>` adds exactly this
+        one asset on top of it. Inspection only: publishing and saving are
+        unavailable on that route, not merely hidden. Deliberately ungated on
+        `asset.source`/`assetKind` — every kind (furniture, character, pet)
+        and both sources (custom and built-in) get this link, for symmetry
+        and simplicity; a built-in asset is already in the base bundle, so
+        it's a harmless no-op there. Unrelated to #102 (pre-publish preview
+        rendering quality for `/assets/submit`) — this is post-publish
+        inspection of an asset that already exists, not a factor in the
+        submit flow.
       */}
       <p className="mt-3 flex flex-wrap gap-2">
-        <Link to="/editor" className="border-2 border-border px-3 py-1.5 text-sm text-ink hover:border-accent">
+        <Link
+          to={`/editor?asset=${asset.assetId}`}
+          className="border-2 border-border px-3 py-1.5 text-sm text-ink hover:border-accent"
+        >
           Open in editor
         </Link>
         {/*

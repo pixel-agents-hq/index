@@ -305,6 +305,50 @@ describe('GET /api/v1/assets/catalog', () => {
   });
 });
 
+describe('GET /api/v1/assets/:assetId/catalog (#121)', () => {
+  it('404s for an unknown id', async () => {
+    const response = await app.inject({ method: 'GET', url: '/api/v1/assets/NO_SUCH_ASSET/catalog' });
+    expect(response.statusCode).toBe(404);
+  });
+
+  it('404s for a builtin id — already in every editor’s base bundle', async () => {
+    await insertBuiltinFurniture('SINGLE_CATALOG_BUILTIN');
+    const response = await app.inject({ method: 'GET', url: '/api/v1/assets/SINGLE_CATALOG_BUILTIN/catalog' });
+    expect(response.statusCode).toBe(404);
+  });
+
+  it('serves one furniture asset’s own manifest + sprites', async () => {
+    await publish('SINGLE_CATALOG_CHAIR');
+    const response = await app.inject({ method: 'GET', url: '/api/v1/assets/SINGLE_CATALOG_CHAIR/catalog' });
+    expect(response.statusCode).toBe(200);
+    const body = response.json<{ assetKind: string; catalog: { id: string }[]; sprites: Record<string, unknown> }>();
+    expect(body.assetKind).toBe('furniture');
+    expect(body.catalog.map((entry) => entry.id)).toEqual(['SINGLE_CATALOG_CHAIR']);
+    expect(body.sprites.SINGLE_CATALOG_CHAIR).toBeDefined();
+  });
+
+  it('serves a character’s raw frame data', async () => {
+    await publishCharacter('SINGLE_CATALOG_HERO');
+    const response = await app.inject({ method: 'GET', url: '/api/v1/assets/SINGLE_CATALOG_HERO/catalog' });
+    expect(response.statusCode).toBe(200);
+    const body = response.json<{ assetKind: string; character: { down: unknown; up: unknown; right: unknown } }>();
+    expect(body.assetKind).toBe('character');
+    expect(body.character.down).toBeDefined();
+    expect(body.character.up).toBeDefined();
+    expect(body.character.right).toBeDefined();
+  });
+
+  it('serves a pet’s raw frame data', async () => {
+    await publishPet('SINGLE_CATALOG_PET');
+    const response = await app.inject({ method: 'GET', url: '/api/v1/assets/SINGLE_CATALOG_PET/catalog' });
+    expect(response.statusCode).toBe(200);
+    const body = response.json<{ assetKind: string; pet: { walkDown: unknown; idleDown: unknown } }>();
+    expect(body.assetKind).toBe('pet');
+    expect(body.pet.walkDown).toBeDefined();
+    expect(body.pet.idleDown).toBeDefined();
+  });
+});
+
 describe('GET /api/v1/assets/:assetId/download (#119)', () => {
   it('404s for an unknown id', async () => {
     const response = await app.inject({ method: 'GET', url: '/api/v1/assets/NO_SUCH_ASSET/download' });

@@ -44,6 +44,23 @@ const META_RESPONSE = {
 
 const SOURCE_LAYOUT = { version: 1, layoutRevision: 4, cols: 2, rows: 2, tiles: [0, 0, 0, 0], furniture: [] };
 
+function assetDetail(overrides: Record<string, unknown> = {}) {
+  return {
+    assetId: 'CUSTOM_LAMP',
+    assetKind: 'furniture',
+    name: 'Custom Lamp',
+    category: 'decor',
+    source: 'custom',
+    author: { discordId: null, username: 'someone', displayName: 'someone', avatarUrl: null },
+    tags: ['static'],
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+    files: { sprite: '/api/v1/assets/CUSTOM_LAMP/sprite.png' },
+    manifest: [{ id: 'CUSTOM_LAMP' }],
+    ...overrides,
+  };
+}
+
 function detail(overrides: Record<string, unknown> = {}) {
   return {
     slug: 'blue-office',
@@ -347,5 +364,32 @@ describe('LayoutEditorPage', () => {
       ),
     ).toBeInTheDocument();
     expect(screen.queryByTitle('Pixel Agents office editor')).not.toBeInTheDocument();
+  });
+
+  describe('single-asset inspection editor (#121)', () => {
+    it('names the asset, loads it into the frame, and never offers a publish action', async () => {
+      renderEditor('/editor?asset=CUSTOM_LAMP', (url) =>
+        url.endsWith('/assets/CUSTOM_LAMP') ? Response.json(assetDetail()) : Response.json({}),
+      );
+
+      expect(await screen.findByRole('heading', { name: 'Try “Custom Lamp”' })).toBeInTheDocument();
+      const iframe = await screen.findByTitle('Pixel Agents office editor');
+      expect(iframe).toHaveAttribute('src', expect.stringContaining('asset=CUSTOM_LAMP'));
+
+      // Genuinely unavailable, not merely disabled or hidden — see LayoutEditorPage.tsx.
+      expect(screen.queryByRole('button', { name: 'Continue to publish' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Check preview' })).toBeInTheDocument();
+    });
+
+    it('ignores ?asset= when replacing an existing layout — the two modes do not combine', async () => {
+      renderEditor('/layouts/blue-office/edit?asset=CUSTOM_LAMP', (url) =>
+        url.endsWith('/assets/CUSTOM_LAMP') ? Response.json(assetDetail()) : Response.json(detail()),
+      );
+
+      expect(await screen.findByRole('heading', { name: 'Edit layout' })).toBeInTheDocument();
+      const iframe = await screen.findByTitle('Pixel Agents office editor');
+      expect(iframe).not.toHaveAttribute('src', expect.stringContaining('asset='));
+    });
   });
 });

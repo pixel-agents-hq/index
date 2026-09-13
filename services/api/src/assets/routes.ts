@@ -33,6 +33,7 @@ import {
   customAssetDetailResponseSchema,
   listCustomAssetsQuerySchema,
   listCustomAssetsResponseSchema,
+  singleAssetCatalogResponseSchema,
 } from './schemas.js';
 import { toDetail, toSummary } from './serialize.js';
 import { encodeSpritePng } from './spritePng.js';
@@ -258,6 +259,41 @@ export function registerAssetRoutes(app: FastifyInstance, { db }: AssetRoutesDep
         .header('content-type', 'application/zip')
         .header('content-disposition', `attachment; filename="${assetId}.zip"`)
         .send(buffer);
+    },
+  );
+
+  /**
+   * The narrow, single-asset counterpart to `GET /api/v1/assets/catalog`
+   * (#121) — what the single-asset inspection editor loads on top of the
+   * built-in bundle, instead of the full custom catalog #120 stopped serving
+   * by default. 404s for a builtin row too: it's already in every editor's
+   * base bundle, so there is nothing extra for this route to add.
+   */
+  typed.get(
+    '/api/v1/assets/:assetId/catalog',
+    { schema: { params: assetIdParamsSchema, response: singleAssetCatalogResponseSchema } },
+    async (request) => {
+      const { assetId } = request.params;
+      const [asset] = await db.select().from(schema.customAssets).where(eq(schema.customAssets.assetId, assetId));
+      if (asset?.source !== 'custom') throw ApiError.notFound(`No custom asset "${assetId}".`);
+
+      const sprites = asset.sprites as Record<string, unknown>;
+      const base = { schemaVersion: SCHEMA_VERSION, assetKind: asset.assetKind, name: asset.name };
+      switch (asset.assetKind) {
+        case 'furniture':
+          return { ...base, catalog: asset.manifest as { id: string }[], sprites };
+        case 'character': {
+          // Single-element tuple, same as `renderer/customAssets.ts`'s
+          // `allCharacters`/`allPets` — a character/pet manifest always has
+          // exactly one entry (see `decodeCharacter.ts`/`decodePet.ts`).
+          const [entry] = asset.manifest as [{ id: string }];
+          return { ...base, character: sprites[entry.id] };
+        }
+        case 'pet': {
+          const [entry] = asset.manifest as [{ id: string }];
+          return { ...base, pet: sprites[entry.id] };
+        }
+      }
     },
   );
 

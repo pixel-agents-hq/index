@@ -182,6 +182,33 @@ export const customAssetCatalogResponseSchema = {
 } as const;
 
 /**
+ * `GET /:assetId/catalog` (#121) — the single-asset counterpart to the
+ * catalog route above, for the single-asset inspection editor. Discriminated
+ * by `assetKind`: furniture carries `catalog`/`sprites` (this one row's own
+ * manifest entries, same shape as the full catalog just scoped to one
+ * asset); character/pet carry their raw frame data directly (`character`/
+ * `pet`) — already the exact shape the browser's live-office webview needs,
+ * no re-encoding. Never returned for a builtin row (see routes.ts) — those
+ * are already in every editor's base bundle, so there is nothing extra to
+ * serve.
+ */
+export const singleAssetCatalogResponseSchema = {
+  200: {
+    type: 'object',
+    properties: {
+      schemaVersion: { type: 'integer' },
+      assetKind: { type: 'string', enum: ['furniture', 'character', 'pet'] },
+      name: { type: 'string' },
+      catalog: { type: 'array', items: { type: 'object', additionalProperties: true } },
+      sprites: { type: 'object', additionalProperties: true },
+      character: { type: 'object', additionalProperties: true },
+      pet: { type: 'object', additionalProperties: true },
+    },
+    required: ['schemaVersion', 'assetKind', 'name'],
+  },
+} as const;
+
+/**
  * `assetKind`, `category`, and `name` are NOT accepted here (#105 follow-up)
  * — all three are already inside the zip itself: every kind's manifest now
  * carries `name` (and furniture's carries `category`), so `submit.ts` decodes
