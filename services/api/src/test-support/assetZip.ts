@@ -80,6 +80,32 @@ export async function petZip(
   return zip.generateAsync({ type: 'nodebuffer' });
 }
 
+/** A 2-way rotation group (front + side), mirroring decode.test.ts's own fixture. */
+export async function rotationAssetZip(id: string): Promise<Buffer> {
+  const zip = new JSZip();
+  zip.file(
+    'manifest.json',
+    JSON.stringify({
+      id,
+      name: 'Test Desk',
+      category: 'desks',
+      type: 'group',
+      groupType: 'rotation',
+      rotationScheme: '2-way',
+      canPlaceOnWalls: false,
+      canPlaceOnSurfaces: false,
+      backgroundTiles: 1,
+      members: [
+        { type: 'asset', id: `${id}_FRONT`, file: 'front.png', width: 32, height: 32, footprintW: 2, footprintH: 2, orientation: 'front' },
+        { type: 'asset', id: `${id}_SIDE`, file: 'side.png', width: 16, height: 32, footprintW: 1, footprintH: 2, orientation: 'side' },
+      ],
+    }),
+  );
+  zip.file('front.png', tinyPng(32, 32));
+  zip.file('side.png', tinyPng(16, 32));
+  return zip.generateAsync({ type: 'nodebuffer' });
+}
+
 /** pixel-art-mcp's own nested `assets/furniture/<ID>/manifest.json` zip shape. */
 export async function nestedAssetZip(id: string): Promise<Buffer> {
   const zip = new JSZip();

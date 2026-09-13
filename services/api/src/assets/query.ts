@@ -1,6 +1,6 @@
 /** SQL for custom assets: list (newest, optional category/author filter), detail, insert-time lookups. */
 
-import { and, arrayContains, arrayOverlaps, desc, eq, not, sql } from 'drizzle-orm';
+import { and, arrayContains, arrayOverlaps, desc, eq, inArray, not, sql } from 'drizzle-orm';
 
 import type { AnyDatabase } from '../db/client.js';
 import * as schema from '../db/schema.js';
@@ -126,6 +126,12 @@ export async function getCustomAssetByAssetId(
 ): Promise<schema.CustomAsset | null> {
   const [row] = await db.select().from(schema.customAssets).where(eq(schema.customAssets.assetId, assetId));
   return row ?? null;
+}
+
+/** Every row matching the given `assetId`s — the multi-asset download route's lookup (#119). */
+export async function getCustomAssetsByIds(db: AnyDatabase, assetIds: string[]): Promise<schema.CustomAsset[]> {
+  if (assetIds.length === 0) return [];
+  return db.select().from(schema.customAssets).where(inArray(schema.customAssets.assetId, assetIds));
 }
 
 /** Every custom-asset root id currently in use — the DB half of the id-collision check. */
