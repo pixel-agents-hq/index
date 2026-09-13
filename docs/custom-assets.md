@@ -25,7 +25,7 @@ assets](#extending-the-gallery-to-built-in-assets)).
 made every published custom asset available everywhere — merged into the validation
 catalog for any layout that referenced it, and merged into every browser editor
 session's palette. #118 reverses both of those as the custom-asset catalog has grown:
-#120 removed the submit/replace-time catalog merge (a layout referencing custom
+issue #120 removed the submit/replace-time catalog merge (a layout referencing custom
 furniture is now rejected, the same way an unknown furniture id already was) and the
 browser-client catalog merge (the editor now loads built-ins only, by default). The
 architecture below still documents the pieces that are unchanged (upload, decode,
