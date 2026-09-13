@@ -52,6 +52,24 @@ describe('AssetDetailPage', () => {
     expect(screen.queryByText('by someone', { exact: false })).not.toBeInTheDocument();
   });
 
+  it('shows a Download link for a custom asset, pointing at the download endpoint', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json(detail())));
+    renderDetail();
+
+    expect(await screen.findByRole('link', { name: 'Download' })).toHaveAttribute(
+      'href',
+      expect.stringContaining('/api/v1/assets/MY_CHAIR/download'),
+    );
+  });
+
+  it('shows no Download link for a builtin asset (#119: redundant with vendor/pixel-agents)', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json(detail({ source: 'builtin' }))));
+    renderDetail();
+
+    await screen.findByRole('heading', { name: 'My Chair' });
+    expect(screen.queryByRole('link', { name: 'Download' })).not.toBeInTheDocument();
+  });
+
   it('shows an error notice for a 404', async () => {
     vi.stubGlobal(
       'fetch',

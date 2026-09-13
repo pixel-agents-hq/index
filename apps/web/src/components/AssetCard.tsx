@@ -5,9 +5,33 @@ import type { AssetSummary } from '../api/types';
 import { AssetPoseMontage } from './AssetPoseMontage';
 import { AuthorLink } from './AuthorLink';
 
-export function AssetCard({ asset }: { asset: AssetSummary }) {
+export interface AssetCardProps {
+  asset: AssetSummary;
+  /**
+   * Multi-select checkbox — omitted entirely for a built-in asset (#119: not
+   * downloadable here, so there is nothing a selection would do for one).
+   */
+  selected?: boolean;
+  onToggleSelect?: (assetId: string) => void;
+}
+
+export function AssetCard({ asset, selected, onToggleSelect }: AssetCardProps) {
   return (
-    <article className="flex flex-col border-2 border-border bg-surface">
+    <article className="relative flex flex-col border-2 border-border bg-surface">
+      {asset.source === 'custom' && onToggleSelect && (
+        <label
+          className="absolute right-2 top-2 z-10 flex h-6 w-6 cursor-pointer items-center justify-center border-2 border-border bg-surface"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <span className="sr-only">Select {asset.name} for download</span>
+          <input
+            type="checkbox"
+            checked={selected ?? false}
+            onChange={() => onToggleSelect(asset.assetId)}
+            className="h-4 w-4"
+          />
+        </label>
+      )}
       <Link
         to={`/assets/${asset.assetId}`}
         className="block bg-canvas p-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"

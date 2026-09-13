@@ -15,13 +15,16 @@ import type { AnyDatabase } from '../db/client.js';
 import * as schema from '../db/schema.js';
 import { ApiError } from '../errors.js';
 import type { RequestSchemas } from '../http.js';
+import { PUBLIC_REVALIDATED, respondNotModifiedIfMatching } from '../layouts/caching.js';
 import { authorForLayout, authorsForLayouts } from '../layouts/query.js';
 import type { CharacterFrames } from './decodeCharacter.js';
 import type { PetFrames } from './decodePet.js';
+import { buildAssetsExportZip } from './exportZip.js';
 import type { FlattenedAsset } from './manifest.js';
 import { buildAssetPoses } from './poses.js';
-import { allCustomAssetCatalog, listCustomAssets } from './query.js';
+import { allCustomAssetCatalog, getCustomAssetsByIds, listCustomAssets } from './query.js';
 import {
+  assetDownloadQuerySchema,
   assetFramesResponseSchema,
   assetIdParamsSchema,
   assetManifestSchemaResponseSchema,
@@ -33,6 +36,9 @@ import {
 } from './schemas.js';
 import { toDetail, toSummary } from './serialize.js';
 import { encodeSpritePng } from './spritePng.js';
+
+/** `GET /api/v1/assets/download`'s cap on how many ids one request may bundle. */
+const MAX_DOWNLOAD_IDS = 50;
 
 export interface AssetRoutesDeps {
   db: AnyDatabase;
@@ -169,6 +175,54 @@ export function registerAssetRoutes(app: FastifyInstance, { db }: AssetRoutesDep
     },
   );
 
+  /**
+   * A single zip bundling every selected asset, laid out so it can be
+   * dropped straight into a pixel-agents `externalAssetDirectories` entry —
+   * see `exportZip.ts`'s file header for the exact layout and why it's
+   * rebuilt from `manifest`/`sprites` rather than `rawZip`. Registered
+   * before `/:assetId` for readability, same note as `/schema/:kind` above:
+   * the literal `download` segment always wins routing over the `:assetId`
+   * param regardless of registration order.
+   *
+   * Built-in assets are deliberately excluded (#119) — they're already
+   * freely available from the vendor/pixel-agents repo itself, so a download
+   * affordance for them here would be redundant. An id naming one, like an
+   * unknown id, fails the whole request rather than silently bundling fewer
+   * assets than were selected.
+   */
+  typed.get(
+    '/api/v1/assets/download',
+    { schema: { querystring: assetDownloadQuerySchema } },
+    async (request, reply) => {
+      const ids = [
+        ...new Set(
+          request.query.ids
+            .split(',')
+            .map((id) => id.trim())
+            .filter((id) => id.length > 0),
+        ),
+      ];
+      if (ids.length === 0) throw ApiError.badRequest('At least one asset id is required.');
+      if (ids.length > MAX_DOWNLOAD_IDS) {
+        throw ApiError.badRequest(`At most ${MAX_DOWNLOAD_IDS} asset ids per request.`);
+      }
+
+      const found = await getCustomAssetsByIds(db, ids);
+      const byId = new Map(found.map((asset) => [asset.assetId, asset]));
+
+      const missing = ids.filter((id) => !byId.has(id));
+      if (missing.length > 0) throw ApiError.notFound(`No custom asset "${missing.join('", "')}".`);
+      const builtinIds = ids.filter((id) => byId.get(id)?.source === 'builtin');
+      if (builtinIds.length > 0) throw ApiError.notFound(`No custom asset "${builtinIds.join('", "')}".`);
+
+      const buffer = await buildAssetsExportZip(ids.map((id) => byId.get(id) as schema.CustomAsset));
+      return reply
+        .header('content-type', 'application/zip')
+        .header('content-disposition', 'attachment; filename="pixel-index-assets.zip"')
+        .send(buffer);
+    },
+  );
+
   typed.get(
     '/api/v1/assets/:assetId',
     { schema: { params: assetIdParamsSchema, response: customAssetDetailResponseSchema } },
@@ -179,6 +233,31 @@ export function registerAssetRoutes(app: FastifyInstance, { db }: AssetRoutesDep
 
       const author = await authorForLayout(db, asset.authorUserId);
       return toDetail(asset, author);
+    },
+  );
+
+  /**
+   * A pixel-agents-importable zip for this one asset — see the
+   * `/api/v1/assets/download` route above and `exportZip.ts`'s file header.
+   * Built-in assets 404 here too, same reasoning as that route: they're
+   * already available from vendor/pixel-agents itself.
+   */
+  typed.get(
+    '/api/v1/assets/:assetId/download',
+    { schema: { params: assetIdParamsSchema } },
+    async (request, reply) => {
+      const { assetId } = request.params;
+      const [asset] = await db.select().from(schema.customAssets).where(eq(schema.customAssets.assetId, assetId));
+      if (!asset || asset.source === 'builtin') throw ApiError.notFound(`No custom asset "${assetId}".`);
+
+      reply.header('cache-control', PUBLIC_REVALIDATED);
+      if (respondNotModifiedIfMatching(request, reply, `"${asset.updatedAt.getTime()}"`)) return;
+
+      const buffer = await buildAssetsExportZip([asset]);
+      return reply
+        .header('content-type', 'application/zip')
+        .header('content-disposition', `attachment; filename="${assetId}.zip"`)
+        .send(buffer);
     },
   );
 

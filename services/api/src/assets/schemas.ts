@@ -99,6 +99,16 @@ export const listCustomAssetsResponseSchema = {
   },
 } as const;
 
+/** `GET /api/v1/assets/download?ids=A,B,C` (#119) — comma-separated, same convention as `?orientation=`/`?animation=`. */
+export const assetDownloadQuerySchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    ids: { type: 'string', description: 'Comma-separated custom-asset ids to bundle into one download.' },
+  },
+  required: ['ids'],
+} as const;
+
 export const assetIdParamsSchema = {
   type: 'object',
   properties: { assetId: { type: 'string', pattern: '^[A-Z][A-Z0-9_]*$' } },

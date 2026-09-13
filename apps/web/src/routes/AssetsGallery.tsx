@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 
-import { ApiError, listAssets } from '../api/client';
+import { ApiError, apiUrl, listAssets } from '../api/client';
 import type { AssetSummary } from '../api/types';
 import { AssetCard } from '../components/AssetCard';
 import { AssetFilterBar } from '../components/AssetFilterBar';
@@ -28,12 +28,19 @@ export function AssetsGallery() {
   const [loadingMore, setLoadingMore] = useState(false);
   const requestRef = useRef<AbortController | null>(null);
 
+  // Local, transient state (#119) — no existing selection pattern to extend
+  // in this app, and a selection made for one bulk download is naturally
+  // one-off, so it resets whenever the underlying asset list does rather
+  // than surviving a filter change or reload.
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+
   useEffect(() => {
     const controller = new AbortController();
     requestRef.current = controller;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setAssets(null);
     setError(null);
+    setSelected(new Set());
     listAssets({ ...assetFiltersToApiParams(filters), limit: PAGE_SIZE }, controller.signal)
       .then((response) => {
         if (controller.signal.aborted) return;
@@ -69,6 +76,15 @@ export function AssetsGallery() {
       });
   }
 
+  function toggleSelect(assetId: string) {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(assetId)) next.delete(assetId);
+      else next.add(assetId);
+      return next;
+    });
+  }
+
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
@@ -78,6 +94,35 @@ export function AssetsGallery() {
         </Link>
       </div>
       <AssetFilterBar filters={filters} onChange={(next) => setSearchParams(assetFiltersToSearchParams(next))} />
+      {selected.size > 0 && (
+        <div className="mb-4 flex items-center justify-between border-2 border-accent bg-surface px-3 py-2">
+          <p className="m-0 text-sm text-ink">
+            {selected.size} asset{selected.size === 1 ? '' : 's'} selected
+          </p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setSelected(new Set())}
+              className="px-2 py-1 text-sm text-muted hover:text-ink"
+            >
+              Clear
+            </button>
+            {/*
+              A plain GET link, same as every other download affordance in
+              this app (LayoutJsonPanel.tsx, AssetDetailPage.tsx) — the
+              browser handles the download natively via content-disposition,
+              no fetch/blob needed here either.
+            */}
+            <a
+              href={apiUrl(`/api/v1/assets/download?ids=${[...selected].join(',')}`)}
+              download="pixel-index-assets.zip"
+              className="border-2 border-accent px-3 py-1.5 text-sm text-accent hover:bg-accent hover:text-accent-solid-ink"
+            >
+              Download selected
+            </a>
+          </div>
+        </div>
+      )}
       {error ? (
         <ErrorNotice error={error} />
       ) : assets === null ? (
@@ -107,7 +152,9 @@ export function AssetsGallery() {
           <Masonry
             items={assets}
             keyFor={(asset) => asset.assetId}
-            renderItem={(asset) => <AssetCard asset={asset} />}
+            renderItem={(asset) => (
+              <AssetCard asset={asset} selected={selected.has(asset.assetId)} onToggleSelect={toggleSelect} />
+            )}
             className="list-none p-0"
           />
           {cursor && (

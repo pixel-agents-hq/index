@@ -59,10 +59,25 @@ export function AssetDetailPage() {
         starting point" is on the layout detail page: placing furniture,
         unlike publishing a layout, needs no submission capability.
       */}
-      <p className="mt-3">
+      <p className="mt-3 flex flex-wrap gap-2">
         <Link to="/editor" className="border-2 border-border px-3 py-1.5 text-sm text-ink hover:border-accent">
           Open in editor
         </Link>
+        {/*
+          Built-in assets are already freely available from the
+          vendor/pixel-agents repo itself (#119) — a download affordance for
+          them here would be redundant, so this is gated the same way the
+          "Built-in" badge above is.
+        */}
+        {asset.source === 'custom' && (
+          <a
+            href={apiUrl(`/api/v1/assets/${asset.assetId}/download`)}
+            download={`${asset.assetId}.zip`}
+            className="border-2 border-border px-3 py-1.5 text-sm text-ink hover:border-accent"
+          >
+            Download
+          </a>
+        )}
       </p>
 
       <div className="mt-4 inline-block border-2 border-border bg-canvas p-4">

@@ -266,4 +266,83 @@ describe('AssetsGallery', () => {
       '/assets/submit',
     );
   });
+
+  describe('multi-selection and combined download (#119)', () => {
+    it('shows no checkbox on a builtin card, but one on a custom card', async () => {
+      stubAssetsFetch(() =>
+        Response.json({
+          schemaVersion: 1,
+          total: 2,
+          assets: [
+            summary({ assetId: 'BUILTIN_CHAIR', name: 'Builtin Chair', source: 'builtin' }),
+            summary({ assetId: 'MY_CHAIR', name: 'My Chair', source: 'custom' }),
+          ],
+          nextCursor: null,
+        }),
+      );
+      renderGallery();
+      await screen.findByText('Builtin Chair');
+
+      expect(screen.getAllByRole('checkbox')).toHaveLength(1);
+      expect(screen.getByRole('checkbox', { name: 'Select My Chair for download' })).toBeInTheDocument();
+    });
+
+    it('selecting assets shows the bulk bar with the right count and a combined-download link', async () => {
+      stubAssetsFetch(() =>
+        Response.json({
+          schemaVersion: 1,
+          total: 2,
+          assets: [summary(), summary({ assetId: 'MY_LAMP', name: 'My Lamp' })],
+          nextCursor: null,
+        }),
+      );
+      renderGallery();
+      await screen.findByText('My Chair');
+
+      expect(screen.queryByText('Download selected')).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Select My Chair for download' }));
+      expect(await screen.findByText('1 asset selected')).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Download selected' })).toHaveAttribute(
+        'href',
+        expect.stringContaining('/api/v1/assets/download?ids=MY_CHAIR'),
+      );
+
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Select My Lamp for download' }));
+      expect(await screen.findByText('2 assets selected')).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Download selected' })).toHaveAttribute(
+        'href',
+        expect.stringContaining('ids=MY_CHAIR,MY_LAMP'),
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
+      expect(screen.queryByText('Download selected')).not.toBeInTheDocument();
+    });
+
+    it('resets the selection when the filters change', async () => {
+      let lastUrl = '';
+      stubAssetsFetch((url) => {
+        lastUrl = url;
+        const wantsDecor = url.includes('category=decor');
+        return Response.json({
+          schemaVersion: 1,
+          total: 1,
+          assets: [summary(wantsDecor ? { assetId: 'MY_LAMP', name: 'My Lamp', category: 'decor' } : {})],
+          nextCursor: null,
+        });
+      });
+      renderGallery();
+      await screen.findByText('My Chair');
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Select My Chair for download' }));
+      expect(await screen.findByText('1 asset selected')).toBeInTheDocument();
+
+      await waitFor(() => expect(screen.getByRole('option', { name: 'decor' })).toBeInTheDocument());
+      fireEvent.change(screen.getByLabelText('Category'), { target: { value: 'decor' } });
+
+      await screen.findByText('My Lamp');
+      expect(lastUrl).toContain('category=decor');
+      expect(screen.queryByText('asset selected')).not.toBeInTheDocument();
+      expect(screen.queryByText('Download selected')).not.toBeInTheDocument();
+    });
+  });
 });

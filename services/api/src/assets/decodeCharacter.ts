@@ -26,6 +26,7 @@ import JSZip from 'jszip';
 import { PNG } from 'pngjs';
 
 import { ApiError } from '../errors.js';
+import { encodeSpritePng } from './spritePng.js';
 import { facingAssetTags } from './tags.js';
 import {
   findNamedTextEntry,
@@ -129,6 +130,30 @@ function decodeCharacterPng(buffer: Buffer, path: string): CharacterFrames {
     result[dir] = frames;
   }
   return result;
+}
+
+/**
+ * The exact inverse of `decodeCharacterPng` — reassembles the 112×96,
+ * 3-direction × 7-frame sheet a `char_N.png` external-asset file must be
+ * (#119's export path, `exportZip.ts`), so pixel-agents' own
+ * `decodeCharacterPng` (which this codebase's copy is pinned to, see the
+ * file header) reads it back identically to how it was originally decoded.
+ */
+export function encodeCharacterSheet(frames: CharacterFrames): Buffer {
+  const grid: string[][] = [];
+  for (const dir of CHARACTER_DIRECTIONS) {
+    for (let y = 0; y < CHAR_FRAME_H; y++) {
+      const row: string[] = [];
+      for (let f = 0; f < CHAR_FRAMES_PER_ROW; f++) {
+        const frame = frames[dir][f];
+        for (let x = 0; x < CHAR_FRAME_W; x++) {
+          row.push(frame?.[y]?.[x] ?? '');
+        }
+      }
+      grid.push(row);
+    }
+  }
+  return encodeSpritePng(grid);
 }
 
 const ajv = withFormats(new Ajv2020({ allErrors: true, strict: false }));

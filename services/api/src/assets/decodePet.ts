@@ -34,6 +34,7 @@ import JSZip from 'jszip';
 import { PNG } from 'pngjs';
 
 import { ApiError } from '../errors.js';
+import { encodeSpritePng } from './spritePng.js';
 import { facingAssetTags } from './tags.js';
 import { findNamedTextEntry, firstFreeId, type IdCollisionChecker, issue, issuesFromAjvErrors, pngPaths } from './zip.js';
 
@@ -141,6 +142,37 @@ function decodePetPng(buffer: Buffer, path: string): PetFrames {
   }
 
   return { walkDown, idleDown, walkUp, idleUp, walkRight };
+}
+
+/**
+ * The exact inverse of `decodePetPng` — reassembles the 96×96 fixed frame
+ * grid a `pet.png` external-asset file must be (#119's export path,
+ * `exportZip.ts`), so pixel-agents' own `decodePetPng` (which this
+ * codebase's copy is pinned to, see the file header) reads it back
+ * identically to how it was originally decoded.
+ */
+export function encodePetSheet(frames: PetFrames): Buffer {
+  // Each of the three sheet rows is a uniform-width sequence of frames —
+  // same row order `decodePetPng` reads them in (see its own comment above).
+  const rowGroups: { frameList: string[][][]; frameWidth: number }[] = [
+    { frameList: [...frames.walkDown, ...frames.idleDown], frameWidth: PET_FRAME_W_SMALL },
+    { frameList: [...frames.walkUp, ...frames.idleUp], frameWidth: PET_FRAME_W_SMALL },
+    { frameList: frames.walkRight, frameWidth: PET_FRAME_W_LARGE },
+  ];
+
+  const grid: string[][] = [];
+  for (const { frameList, frameWidth } of rowGroups) {
+    for (let y = 0; y < PET_FRAME_H; y++) {
+      const row: string[] = [];
+      for (const frame of frameList) {
+        for (let x = 0; x < frameWidth; x++) {
+          row.push(frame[y]?.[x] ?? '');
+        }
+      }
+      grid.push(row);
+    }
+  }
+  return encodeSpritePng(grid);
 }
 
 const ajv = withFormats(new Ajv2020({ allErrors: true, strict: false }));
