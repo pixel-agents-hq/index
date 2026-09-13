@@ -50,6 +50,17 @@ const noop = () => {
  */
 const LAYOUT_POST_DEBOUNCE_MS = 200;
 
+/**
+ * Edit mode's one fixed, non-removable mock agent (#121) — previously edit
+ * mode showed none at all ("nobody is working in a layout being drawn"), but
+ * that left no way for a custom CHARACTER asset to ever appear anywhere:
+ * unlike furniture (the palette) and pets (the "active pets" toggle),
+ * characters have no placement/toggle affordance in the editor. A single
+ * always-present agent gives every editor session one ambient character, and
+ * gives the single-asset editor a place to put the one it's inspecting.
+ */
+const EDIT_MODE_AGENT_ID = 0;
+
 function sendToParent(message: ViewerMessage): void {
   window.parent.postMessage(message, window.location.origin);
 }
@@ -159,7 +170,7 @@ export function PreviewApp() {
   const containerRef = useRef<HTMLDivElement>(null);
   const panRef = useRef({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(() => Math.max(1, Math.round(2 * window.devicePixelRatio)));
-  const [assets, setAssets] = useState<LoadedAssetData | null>(null);
+  const [assets, setAssets] = useState<(LoadedAssetData & { characterPaletteIndex?: number }) | null>(null);
   const [layoutReady, setLayoutReady] = useState(false);
   const [editing, setEditing] = useState(false);
   const [agents, setAgents] = useState<MockAgent[]>([]);
@@ -183,7 +194,12 @@ export function PreviewApp() {
     // unmounts, so threading a signal into loadLiveOfficeAssets' seven fetches
     // would buy nothing real.
     const controller = new AbortController();
-    loadLiveOfficeAssets()
+    // The frame is a separate document from the parent page (`live-office.html`),
+    // so the single-asset editor's asset id crosses in on the frame's own URL
+    // rather than through the postMessage protocol — see LayoutEditorPage.tsx's
+    // iframe `src`.
+    const assetId = new URLSearchParams(window.location.search).get('asset');
+    loadLiveOfficeAssets(assetId)
       .then((loaded) => {
         if (controller.signal.aborted) return;
         setAssets(loaded);
@@ -251,10 +267,17 @@ export function PreviewApp() {
           const serialized = serializeLayout(layout);
           lastPosted.current = serialized;
           sendToParent({ channel: LIVE_OFFICE_CHANNEL, type: 'layout', layout: serialized });
-          // Nobody is working in a layout being drawn: mock agents are a
-          // read-only-preview affordance, and a character standing on a tile
-          // is one more thing between the editor and the tile underneath.
-          applyAgents(office, []);
+          // One fixed, non-removable mock agent (#121, EDIT_MODE_AGENT_ID) —
+          // not the read-only preview's adjustable `agents` list.
+          // `rebuildFromLayout` above never touches `office.characters`, so
+          // this agent survives every subsequent `edit` message (e.g.
+          // re-importing a layout.json) untouched; `addAgent` is also
+          // idempotent (no-ops if the id already exists), so calling it again
+          // here on every message is harmless either way. Forcing
+          // `characterPaletteIndex` (set only when the single-asset editor is
+          // inspecting a custom character) is what makes that character the
+          // one this agent wears, instead of a random built-in.
+          office.addAgent(EDIT_MODE_AGENT_ID, assets.characterPaletteIndex);
           setAgents([]);
           setEditing(true);
         } else if (isRenderOfficeMessage(data)) {

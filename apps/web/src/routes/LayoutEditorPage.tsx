@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
-import { ApiError, getLayout, getMeta } from '../api/client';
+import { ApiError, getAsset, getLayout, getMeta } from '../api/client';
 import { previewCheck, replaceLayoutContent } from '../api/manageClient';
-import type { LayoutDetail } from '../api/types';
+import type { AssetDetail, LayoutDetail } from '../api/types';
 import { useApi } from '../api/useApi';
 import { useAuth } from '../auth/authState';
 import { ErrorNotice } from '../components/ErrorNotice';
@@ -23,6 +23,9 @@ import type { SubmitPageState } from './SubmitPage';
  *
  * - `/editor` — a blank room from upstream's `createDefaultLayout()`.
  * - `/editor?from=<slug>` — a published layout as the starting point.
+ * - `/editor?asset=<assetId>` — a blank room plus exactly one extra custom
+ *   asset (#121), for inspecting it in isolation. Publishing/saving are
+ *   unavailable here, not merely hidden — see `assetId` below.
  * - `/editor` + the file picker below — someone's own `layout.json`.
  * - `/layouts/<slug>/edit` — that layout, saved back over itself.
  *
@@ -52,6 +55,10 @@ export function LayoutEditorPage() {
   const from = searchParams.get('from');
   const source = slug ?? from;
   const replacing = slug !== undefined;
+  // `?asset=` (#121) is deliberately ignored when a `:slug` route param is
+  // present — "replace this published layout" and "inspect one asset in
+  // isolation" isn't a supported combination.
+  const assetId = replacing ? null : searchParams.get('asset');
 
   const sourceState = useApi(
     (signal) => (source ? getLayout(source, signal) : Promise.resolve<LayoutDetail | null>(null)),
@@ -61,6 +68,14 @@ export function LayoutEditorPage() {
   // whatever it emits — see `EditOfficeMessage.layoutRevision` for why a
   // layout drawn here needs one at all.
   const metaState = useApi((signal) => getMeta(signal), []);
+  // Just the asset's display name (any kind, any source — #121's built-in
+  // symmetry decision) — the frame itself resolves the actual asset data via
+  // its own narrower fetch, keyed off the iframe's own URL (see the `src`
+  // below).
+  const assetState = useApi(
+    (signal) => (assetId ? getAsset(assetId, signal) : Promise.resolve<AssetDetail | null>(null)),
+    [assetId],
+  );
 
   const frame = useRef<HTMLIFrameElement>(null);
   const [frameStatus, setFrameStatus] = useState<'loading' | 'ready' | 'error'>('loading');
@@ -198,7 +213,9 @@ export function LayoutEditorPage() {
     void navigate('/submit', { state });
   }
 
-  const heading = replacing ? 'Edit layout' : 'New layout';
+  const assetMode = assetId !== null;
+  const assetName = assetState.status === 'ready' ? (assetState.data?.name ?? null) : null;
+  const heading = assetMode ? `Try “${assetName ?? '…'}”` : replacing ? 'Edit layout' : 'New layout';
   const changed = raw !== null && raw !== openedWith;
   // Ownership by Discord id, the only identifier the public layout carries
   // (#62). UI only: the API decides, and rejects a replacement from anyone
@@ -235,14 +252,19 @@ export function LayoutEditorPage() {
           {saving ? 'Saving…' : 'Save changes'}
         </button>
       ) : (
-        <button
-          type="button"
-          onClick={goToSubmit}
-          disabled={!raw || !canSubmit}
-          className="border-2 border-accent px-4 py-2 text-sm text-accent hover:bg-accent hover:text-accent-solid-ink disabled:opacity-50"
-        >
-          Continue to publish
-        </button>
+        // Asset mode (#121) is inspection-only: no "Continue to publish"
+        // anywhere in the tree, not merely disabled — there is genuinely no
+        // way to reach `goToSubmit` from this page in this mode.
+        !assetMode && (
+          <button
+            type="button"
+            onClick={goToSubmit}
+            disabled={!raw || !canSubmit}
+            className="border-2 border-accent px-4 py-2 text-sm text-accent hover:bg-accent hover:text-accent-solid-ink disabled:opacity-50"
+          >
+            Continue to publish
+          </button>
+        )
       )}
       <label className="text-sm text-muted">
         <span className="mr-2">or import a layout.json</span>
@@ -268,9 +290,11 @@ export function LayoutEditorPage() {
   const body = (
     <>
       <p className="mt-1 text-sm text-muted">
-        {replacing
-          ? 'Changes replace this layout’s content when you save. Its title, description and tags are edited from My layouts.'
-          : 'Draw an office, then continue to publishing. Nothing is saved until you do.'}
+        {assetMode
+          ? 'A sandbox office for trying this asset out. Nothing here can be saved or published.'
+          : replacing
+            ? 'Changes replace this layout’s content when you save. Its title, description and tags are edited from My layouts.'
+            : 'Draw an office, then continue to publishing. Nothing is saved until you do.'}
       </p>
 
       {replacing && !owned && (
@@ -285,7 +309,7 @@ export function LayoutEditorPage() {
       >
         <iframe
           ref={frame}
-          src={`${import.meta.env.BASE_URL}live-office.html`}
+          src={`${import.meta.env.BASE_URL}live-office.html${assetId ? `?asset=${encodeURIComponent(assetId)}` : ''}`}
           title="Pixel Agents office editor"
           className="h-full w-full border-0"
         />
@@ -309,7 +333,7 @@ export function LayoutEditorPage() {
         Delete removes it.
       </p>
 
-      {replacing ? (
+      {replacing || assetMode ? (
         actionRow
       ) : (
         <SubmissionGate what="Publishing a layout" inline>
@@ -317,7 +341,7 @@ export function LayoutEditorPage() {
         </SubmissionGate>
       )}
 
-      {!replacing && (
+      {!replacing && !assetMode && (
         <p className="mt-2 text-xs text-subtle">
           Already have a layout.json?{' '}
           <Link to="/submit" className="text-accent underline">
@@ -359,6 +383,8 @@ export function LayoutEditorPage() {
       <ErrorNotice error={sourceState.error} />
     ) : metaState.status === 'error' ? (
       <ErrorNotice error={metaState.error} />
+    ) : assetState.status === 'error' ? (
+      <ErrorNotice error={assetState.error} />
     ) : (
       body
     );

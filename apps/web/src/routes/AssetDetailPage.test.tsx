@@ -33,15 +33,29 @@ function renderDetail() {
 }
 
 describe('AssetDetailPage', () => {
-  it('renders the asset, its author, and an unconditional "Open in editor" link', async () => {
+  it('renders the asset, its author, and a single-asset "Open in editor" link (#121)', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => Response.json(detail())));
     renderDetail();
 
     expect(await screen.findByRole('heading', { name: 'My Chair' })).toBeInTheDocument();
     expect(screen.getByText('by someone', { exact: false })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Open in editor' })).toHaveAttribute('href', '/editor');
+    expect(screen.getByRole('link', { name: 'Open in editor' })).toHaveAttribute(
+      'href',
+      '/editor?asset=MY_CHAIR',
+    );
     expect(screen.getByText('MY_CHAIR')).toBeInTheDocument();
     expect(screen.getByText('chairs')).toBeInTheDocument();
+  });
+
+  it('links to the single-asset editor for a builtin asset too (#121 symmetry with #119)', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json(detail({ source: 'builtin' }))));
+    renderDetail();
+
+    expect(await screen.findByRole('heading', { name: 'My Chair' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open in editor' })).toHaveAttribute(
+      'href',
+      '/editor?asset=MY_CHAIR',
+    );
   });
 
   it('shows a "Built-in" notice instead of an author link for a builtin asset', async () => {

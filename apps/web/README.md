@@ -65,10 +65,10 @@ src/routes/assetFilters.ts      the URL <-> AssetFilters <-> API params translat
                                   this only ever offers exactly that
 src/routes/AssetsGallery.tsx    the custom-asset gallery, same shape as Home.tsx
 src/routes/AssetDetailPage.tsx  a custom asset's sprite, metadata, and an "Open in
-                                  editor" link — opens a plain, built-ins-only canvas
-                                  since #120 (live-office/assets.ts no longer merges the
-                                  custom catalog in by default); ungated the same way,
-                                  just without the "already in the palette" guarantee
+                                  editor" link — since #121, `/editor?asset=<id>`: the
+                                  general editor's built-ins-only canvas (#120) plus
+                                  exactly this one asset, inspection-only (no publish/
+                                  save). Ungated on kind or source, including built-ins
 src/routes/AssetSubmitPage.tsx  zip upload + name/category (#101) — no pre-publish
                                   preview; that needs the real engine's rendering logic
                                   and is #102's job
@@ -78,8 +78,9 @@ src/live-office/                isolated iframe entry: thin wrapper around the p
                                   OfficeState/OfficeCanvas/ToolOverlay renderer, and —
                                   driven by the same postMessage protocol — the editor
 src/routes/LayoutEditorPage.tsx  the editor's chrome: which layout to load, importing one,
-                                  and whether it ends at /submit or replaces an existing
-                                  layout
+                                  and whether it ends at /submit, replaces an existing
+                                  layout, or (?asset=<id>, #121) is inspection-only with
+                                  no publish/save action anywhere on the page
 src/components/SubmissionGate.tsx
                                   "members of the Discord community only", shared by
                                   /submit and the editor
