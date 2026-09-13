@@ -12,7 +12,7 @@
  * dedupe -> daily cap -> insert.
  */
 
-import { type Layout, layoutStats, mergeFurnitureCatalog, sha256, validateLayout } from '@pixel-index/layout-core';
+import { type Layout, layoutStats, sha256, validateLayout } from '@pixel-index/layout-core';
 import type { FastifyInstance } from 'fastify';
 import type { FromSchema } from 'json-schema-to-ts';
 
@@ -25,7 +25,7 @@ import { ApiError } from '../errors.js';
 import { recordModerationAction } from '../moderation/audit.js';
 import { writeRateLimitConfig } from '../rateLimit.js';
 import { requestPreview } from '../renderer/client.js';
-import { customAssetsForLayout, furnitureCatalogEntries } from '../renderer/customAssets.js';
+import { customAssetsForLayout } from '../renderer/customAssets.js';
 import { isUniqueViolation, parseAndValidateTags } from './metadata.js';
 import { attachTags, countUserSubmissionsSince, findLayoutBySha256 } from './query.js';
 import { toDetail } from './serialize.js';
@@ -120,16 +120,13 @@ export function registerSubmitRoutes(app: FastifyInstance, { config, db, upstrea
           throw ApiError.badRequest('Body is not valid JSON.');
         }
 
-        // #101: a layout may reference custom (uploaded) furniture the pinned
-        // static catalog knows nothing about — extend it before validating,
-        // rather than rejecting every such layout as "unknown furniture".
+        // #120: custom (uploaded) furniture is no longer accepted in a
+        // published layout — the validation catalog is the pinned static
+        // one only, so a layout referencing custom furniture fails
+        // validation the same way a genuinely unknown furniture id does.
         const customAssets = await customAssetsForLayout(db, parsedLayout);
-        const catalog =
-          furnitureCatalogEntries(customAssets).length > 0
-            ? mergeFurnitureCatalog(validator.catalog, furnitureCatalogEntries(customAssets))
-            : validator.catalog;
         const validation = validateLayout(parsedLayout, {
-          catalog,
+          catalog: validator.catalog,
           requiredRevision: validator.requiredRevision,
           upstreamVersion: pin.version,
         });
@@ -288,12 +285,8 @@ export function registerSubmitRoutes(app: FastifyInstance, { config, db, upstrea
         }
 
         const customAssets = await customAssetsForLayout(db, parsedLayout);
-        const catalog =
-          furnitureCatalogEntries(customAssets).length > 0
-            ? mergeFurnitureCatalog(validator.catalog, furnitureCatalogEntries(customAssets))
-            : validator.catalog;
         const validation = validateLayout(parsedLayout, {
-          catalog,
+          catalog: validator.catalog,
           requiredRevision: validator.requiredRevision,
           upstreamVersion: pin.version,
         });

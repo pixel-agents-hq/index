@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { afterAll, afterEach, assert, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { signAccessToken } from '../auth/tokens.js';
+import * as schema from '../db/schema.js';
 import { createTestDatabase, type Harness } from '../db/test-support/harness.js';
 import type { EnvelopeBody } from '../errors.js';
 import { buildServer } from '../server.js';
@@ -48,6 +49,38 @@ function validLayoutJson(overrides: Record<string, unknown> = {}): string {
     furniture: [],
     testMarker: marker,
     ...overrides,
+  });
+}
+
+/** A published custom-furniture asset, shaped like `assets/submit.ts` would insert. */
+async function insertCustomFurniture(assetId: string) {
+  const author = await insertUser(harness.db, { username: `author-of-${assetId}` });
+  await harness.db.insert(schema.customAssets).values({
+    assetKind: 'furniture',
+    assetId,
+    requestedAssetId: assetId,
+    name: assetId,
+    category: 'chairs',
+    manifest: [
+      {
+        id: assetId,
+        name: assetId,
+        label: assetId,
+        category: 'chairs',
+        file: `${assetId}.png`,
+        width: 16,
+        height: 16,
+        footprintW: 1,
+        footprintH: 1,
+        isDesk: false,
+        canPlaceOnWalls: false,
+        groupId: assetId,
+      },
+    ],
+    sprites: { [assetId]: Array.from({ length: 16 }, () => Array.from({ length: 16 }, () => '#ff00ff')) },
+    rawZip: Buffer.from('fake zip'),
+    authorUserId: author.id,
+    source: 'custom',
   });
 }
 
@@ -210,6 +243,21 @@ describe('POST /api/v1/layouts — layout-core validation', () => {
       .json<EnvelopeBody>()
       .issues?.find((i) => i.code === 'layout.furniture.unknown');
     expect(issue?.message).toContain('NOT_A_REAL_THING');
+  });
+
+  it('rejects a layout referencing published custom furniture, same as an unknown id (#120)', async () => {
+    await insertCustomFurniture('MY_CUSTOM_CHAIR');
+    const { accessToken } = await tokenFor();
+    const response = await submit(
+      'title=Custom+Furniture',
+      validLayoutJson({ furniture: [{ type: 'MY_CUSTOM_CHAIR', col: 0, row: 0 }] }),
+      { authorization: `Bearer ${accessToken}` },
+    );
+    expect(response.statusCode).toBe(422);
+    const issue = response
+      .json<EnvelopeBody>()
+      .issues?.find((i) => i.code === 'layout.furniture.unknown');
+    expect(issue?.message).toContain('MY_CUSTOM_CHAIR');
   });
 
   it('rejects a layoutRevision below the bundled default, explaining why it would break', async () => {
@@ -573,6 +621,18 @@ describe('POST /api/v1/layouts/preview-check', () => {
     const { accessToken } = await tokenFor();
     const response = await previewCheck(validLayoutJson(), { authorization: `Bearer ${accessToken}` }, 'down');
     expect(response.statusCode).toBe(502);
+  });
+
+  it('rejects a layout referencing published custom furniture, same as the real submission path (#120)', async () => {
+    await insertCustomFurniture('PREVIEW_CUSTOM_CHAIR');
+    const response = await previewCheck(
+      validLayoutJson({ furniture: [{ type: 'PREVIEW_CUSTOM_CHAIR', col: 0, row: 0 }] }),
+    );
+    expect(response.statusCode).toBe(422);
+    const issue = response
+      .json<EnvelopeBody>()
+      .issues?.find((i) => i.code === 'layout.furniture.unknown');
+    expect(issue?.message).toContain('PREVIEW_CUSTOM_CHAIR');
   });
 });
 

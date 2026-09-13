@@ -13,13 +13,24 @@ below.
 ## Status
 
 **Complete in this repo** (`pixel-index`): upload API, moderator-issued API-key auth,
-server-side decode pipeline, browser-client merge, renderer integration, the
+server-side decode pipeline, browser-client asset loading, renderer integration, the
 `/assets/` gallery, the producer-side JSON Schema contract, and syncing the built-in
 Pixel Agents catalog into the same gallery. Landed across four PRs: the storage/web-
 upload "stage 1" (#104), characters and pets with a polymorphic `custom_assets` (#106,
 for #105), the published JSON Schema contract (#108, for #107), and the built-in-asset
 sync PR (see [Extending the gallery to built-in
 assets](#extending-the-gallery-to-built-in-assets)).
+
+**#118/#120 (superseding #101's original design):** #101's original design deliberately
+made every published custom asset available everywhere — merged into the validation
+catalog for any layout that referenced it, and merged into every browser editor
+session's palette. #118 reverses both of those as the custom-asset catalog has grown:
+issue #120 removed the submit/replace-time catalog merge (a layout referencing custom
+furniture is now rejected, the same way an unknown furniture id already was) and the
+browser-client catalog merge (the editor now loads built-ins only, by default). The
+architecture below still documents the pieces that are unchanged (upload, decode,
+gallery, renderer integration); B's description and the "API and UI" section below are
+updated to reflect what #120 actually changed.
 
 **Not in this repo, tracked separately**: the `animator` cog's `publish_pixel_agents_asset`
 native tool and the generalized "requesting user" A2A context plumbing (section E below)
@@ -33,7 +44,7 @@ Four repos are in scope for the feature as a whole:
 
 | Repo | Role | Outcome |
 |---|---|---|
-| `pixel-index` | This repo | Upload API, API-key auth, decode pipeline, browser-client merge, renderer integration — **done** |
+| `pixel-index` | This repo | Upload API, API-key auth, decode pipeline, browser-client asset loading, renderer integration — **done** |
 | `pixel-agents-cogs` | Discord bot cogs (Pico) | New native tool on the `animator` cog, A2A metadata plumbing — **tracked separately** |
 | `pixel-art-mcp` | Local Blender→sprite generator | No changes — confirmed to stay a pure local generator |
 | `pixel-agents` | Upstream engine/extension (`vendor/`) | Read-only reference — nothing here changes it |
@@ -120,8 +131,7 @@ flowchart TB
     VendorAssets -- "read once per boot" --> BuiltinSync
     BuiltinSync -- "same decode.ts/decodeCharacter.ts/decodePet.ts\npipeline as an upload; on a pin change:\nDELETE+INSERT source='builtin' only\n(source='custom' rows never touched)" --> DB
 
-    DB -- "GET custom catalog+sprites JSON" --> BrowserClient
-    BrowserClient -- "merge with static bundle,\ncall buildDynamicCatalog() ONCE" --> Render1["office palette (browser)"]
+    BrowserClient -- "build-time static bundle only, since #120\n(no longer reads from DB by default)" --> Render1["office palette (browser)"]
 
     DB -- "GET custom catalog JSON + raw PNGs" --> Renderer
     Renderer -- "page.route() intercepts\nfurniture-catalog.json + PNG fetches" --> Render2["office preview (server-rendered PNG)"]
@@ -142,7 +152,10 @@ still: `GET /api/v1/assets/:assetId/sprite.png` always existed, but
 per-orientation/state/direction "poses", each with its own animation frames — and the
 `AssetPreview` component that animates and lets a visitor switch between them, were
 added after this document's own design work, to actually animate the built-in and
-custom catalogs' previews rather than showing one static PNG per asset.)*
+custom catalogs' previews rather than showing one static PNG per asset. The
+`DB --> BrowserClient` edge from #101's original diagram is gone: #120 removed the
+browser's custom-catalog fetch/merge entirely, so `BrowserClient` now only ever reads
+the build-time static bundle.)*
 
 ## As built, in this repo
 
@@ -178,13 +191,16 @@ custom catalogs' previews rather than showing one static PNG per asset.)*
   (`services/api/src/assets/customAssetContract.test.ts` keeps this from drifting), and
   served live at `GET /api/v1/assets/schema/:kind`.
 
-### `apps/web/src/live-office/assets.ts` — browser-client merge (B)
+### `apps/web/src/live-office/assets.ts` — built-ins only, by default (B)
 
-`loadLiveOfficeAssets()` fetches the custom-asset catalog (`GET /api/v1/assets/catalog`)
-alongside the existing build-time static bundle, merges the `catalog` arrays and
-`sprites` records into **one** `LoadedAssetData`, and calls upstream's
-`buildDynamicCatalog()` exactly once — verified necessary because upstream's function
-replaces its module-level state on each call rather than accumulating it.
+**#120 reversed this.** `loadLiveOfficeAssets()` used to also fetch the entire
+custom-asset catalog (`GET /api/v1/assets/catalog`, unfiltered) and merge it into the
+build-time static bundle, for both the read-only `/layouts/:slug` viewer and the
+general `/editor`. It no longer does either: the palette every editor session sees is
+the built-in catalog alone, keeping the web bundle's furniture surface bounded
+regardless of how many custom assets have been uploaded. A future single-asset
+inspection editor (#121) will load exactly one custom asset through its own, narrower
+path — not this function, and not the unfiltered catalog endpoint.
 
 ### `services/renderer/src/render.ts` — network-level interception (C)
 
@@ -200,10 +216,11 @@ pet sprite fetches.
 
 `/` → `/layouts/` redirect; `/assets/` (`AssetsGallery.tsx`), `/assets/:id`
 (`AssetDetailPage.tsx`), `/assets/submit` (`AssetSubmitPage.tsx`) mirror the layout
-routes' list → detail → editor shape exactly as decided. The editor's palette needs no
-per-asset loading mode — every published custom asset is already in the merged catalog
-from B on every editor session, so "open in editor" from `/assets/:id` is a plain link,
-same shape as the layout detail page's own `?from=`.
+routes' list → detail → editor shape exactly as decided. Since #120, the editor's
+palette is built-ins-only by default (B no longer merges anything in), so "open in
+editor" from `/assets/:id` is a plain link to a *blank, built-ins-only* canvas — it
+does not carry that specific asset in. #121 is the planned replacement: a per-asset
+inspection editor that loads exactly the one requested custom asset.
 
 ## Extending the gallery to built-in assets
 
@@ -317,11 +334,12 @@ git-committed copy, as the only source of truth for what a "current" built-in as
   they already read `custom_assets`; rows can now have `source: 'builtin'`, surfaced in
   `toSummary()`/`toDetail()` (`serialize.ts`) and the response schemas.
   `allCustomAssetCatalog()`/`customAssetsOfKind()` (`query.ts`) — the two functions
-  feeding the browser catalog merge and the renderer's character/pet injection — are
-  scoped to `source = 'custom'` only, since both consumers already independently draw
-  every built-in asset from elsewhere (the browser's own build-time bundle; the
-  renderer's dev-server-hosted, unmodified webview-ui); without that scoping, every
-  built-in asset would render twice.
+  feeding the renderer's per-layout furniture/character/pet injection (B's browser-side
+  catalog merge was removed by #120; these now only feed the renderer, C) — are scoped
+  to `source = 'custom'` only, since both consumers already independently draw every
+  built-in asset from elsewhere (the browser's own build-time bundle; the renderer's
+  dev-server-hosted, unmodified webview-ui); without that scoping, every built-in asset
+  would render twice.
 - **Same grid, interleaved** — `AssetsGallery.tsx`'s list shows a "Built-in" badge on
   `AssetCard.tsx` only for `source: 'builtin'` (its absence is the "community" signal),
   and `AssetFilterBar.tsx` gained a Source filter (Any/Built-in/Community) alongside

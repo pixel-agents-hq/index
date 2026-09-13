@@ -53,11 +53,12 @@ export function AssetDetailPage() {
       )}
 
       {/*
-        Every published custom asset is already in the editor's palette (see
-        live-office/assets.ts's catalog merge) — this is just a convenience
-        link, not a per-asset loading mode. Not gated the way "Use as a
-        starting point" is on the layout detail page: placing furniture,
-        unlike publishing a layout, needs no submission capability.
+        #120: the general editor no longer merges the custom-asset catalog
+        in by default, so this link opens a built-ins-only canvas — it does
+        NOT carry this specific asset in yet. #121 replaces it with a
+        single-asset inspection editor; until then this is a plain,
+        ungated link, same as before, just without the "already in the
+        palette" guarantee it used to have.
       */}
       <p className="mt-3 flex flex-wrap gap-2">
         <Link to="/editor" className="border-2 border-border px-3 py-1.5 text-sm text-ink hover:border-accent">

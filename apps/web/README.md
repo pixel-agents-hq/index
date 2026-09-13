@@ -65,8 +65,10 @@ src/routes/assetFilters.ts      the URL <-> AssetFilters <-> API params translat
                                   this only ever offers exactly that
 src/routes/AssetsGallery.tsx    the custom-asset gallery, same shape as Home.tsx
 src/routes/AssetDetailPage.tsx  a custom asset's sprite, metadata, and an "Open in
-                                  editor" link — never gated: every published asset is
-                                  already in the editor's palette (live-office/assets.ts)
+                                  editor" link — opens a plain, built-ins-only canvas
+                                  since #120 (live-office/assets.ts no longer merges the
+                                  custom catalog in by default); ungated the same way,
+                                  just without the "already in the palette" guarantee
 src/routes/AssetSubmitPage.tsx  zip upload + name/category (#101) — no pre-publish
                                   preview; that needs the real engine's rendering logic
                                   and is #102's job
