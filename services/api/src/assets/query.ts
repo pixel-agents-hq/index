@@ -1,6 +1,6 @@
 /** SQL for custom assets: list (newest, optional category/author filter), detail, insert-time lookups. */
 
-import { and, arrayContains, arrayOverlaps, desc, eq, inArray, not, sql } from 'drizzle-orm';
+import { and, arrayContains, arrayOverlaps, desc, eq, inArray, isNull, not, sql } from 'drizzle-orm';
 
 import type { AnyDatabase } from '../db/client.js';
 import * as schema from '../db/schema.js';
@@ -57,7 +57,11 @@ const SORT = 'newest' as const;
  *   filter in this list already composes).
  */
 function buildConditions(filters: ListCustomAssetsFilters) {
-  const conditions = [];
+  // #125: a soft-deleted asset is gone for good, publicly — never a filter
+  // choice, unlike layouts' `visibility` (there is no "show me deleted
+  // assets" listing mode; the moderation-action log is where that history
+  // lives instead).
+  const conditions = [isNull(schema.customAssets.deletedAt)];
   if (filters.assetKind) conditions.push(eq(schema.customAssets.assetKind, filters.assetKind));
   if (filters.category) conditions.push(eq(schema.customAssets.category, filters.category));
   if (filters.source) conditions.push(eq(schema.customAssets.source, filters.source));
@@ -120,6 +124,14 @@ export async function listCustomAssets(
   return { rows, total, nextCursor };
 }
 
+/**
+ * Any state, including soft-deleted (#125) — `assets/manage.ts`'s DELETE
+ * route's own lookup, mirroring layouts' `getLayoutBySlugAnyVisibility`: the
+ * owner/moderator acting on an asset has to be able to find it regardless of
+ * whether it's already gone, both to act on a live one and to recognise a
+ * repeat delete as the idempotent no-op it is. Every public-facing read uses
+ * `getPublicCustomAssetByAssetId` below instead.
+ */
 export async function getCustomAssetByAssetId(
   db: AnyDatabase,
   assetId: string,
@@ -128,13 +140,34 @@ export async function getCustomAssetByAssetId(
   return row ?? null;
 }
 
-/** Every row matching the given `assetId`s — the multi-asset download route's lookup (#119). */
-export async function getCustomAssetsByIds(db: AnyDatabase, assetIds: string[]): Promise<schema.CustomAsset[]> {
-  if (assetIds.length === 0) return [];
-  return db.select().from(schema.customAssets).where(inArray(schema.customAssets.assetId, assetIds));
+/** The public counterpart to `getCustomAssetByAssetId` above — every `:assetId`-keyed route in routes.ts uses this one instead, so a soft-deleted asset 404s the same way an unknown id does. */
+export async function getPublicCustomAssetByAssetId(
+  db: AnyDatabase,
+  assetId: string,
+): Promise<schema.CustomAsset | null> {
+  const [row] = await db
+    .select()
+    .from(schema.customAssets)
+    .where(and(eq(schema.customAssets.assetId, assetId), isNull(schema.customAssets.deletedAt)));
+  return row ?? null;
 }
 
-/** Every custom-asset root id currently in use — the DB half of the id-collision check. */
+/** Every LIVE row matching the given `assetId`s — the multi-asset download route's lookup (#119). A soft-deleted id is treated the same as an unknown one, same as `getPublicCustomAssetByAssetId`. */
+export async function getCustomAssetsByIds(db: AnyDatabase, assetIds: string[]): Promise<schema.CustomAsset[]> {
+  if (assetIds.length === 0) return [];
+  return db
+    .select()
+    .from(schema.customAssets)
+    .where(and(inArray(schema.customAssets.assetId, assetIds), isNull(schema.customAssets.deletedAt)));
+}
+
+/**
+ * Every custom-asset root id currently in use, INCLUDING soft-deleted rows —
+ * `assetId` stays permanently reserved once issued (see `deletedAt`'s own
+ * comment in db/schema.ts), so a deleted asset's id must keep failing the
+ * collision check the same way a live one does, not free itself up for a
+ * later, unrelated upload to silently reuse.
+ */
 export async function existingCustomAssetIds(db: AnyDatabase): Promise<Set<string>> {
   const rows = await db.select({ assetId: schema.customAssets.assetId }).from(schema.customAssets);
   return new Set(rows.map((row) => row.assetId));
@@ -161,7 +194,13 @@ export async function allCustomAssetCatalog(
   const rows = await db
     .select()
     .from(schema.customAssets)
-    .where(and(eq(schema.customAssets.assetKind, 'furniture'), eq(schema.customAssets.source, 'custom')));
+    .where(
+      and(
+        eq(schema.customAssets.assetKind, 'furniture'),
+        eq(schema.customAssets.source, 'custom'),
+        isNull(schema.customAssets.deletedAt),
+      ),
+    );
   const catalog: unknown[] = [];
   const sprites: Record<string, string[][]> = {};
   for (const row of rows) {
@@ -188,5 +227,11 @@ export async function customAssetsOfKind(
   return db
     .select()
     .from(schema.customAssets)
-    .where(and(eq(schema.customAssets.assetKind, assetKind), eq(schema.customAssets.source, 'custom')));
+    .where(
+      and(
+        eq(schema.customAssets.assetKind, assetKind),
+        eq(schema.customAssets.source, 'custom'),
+        isNull(schema.customAssets.deletedAt),
+      ),
+    );
 }

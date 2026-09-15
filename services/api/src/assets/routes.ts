@@ -22,7 +22,12 @@ import type { PetFrames } from './decodePet.js';
 import { buildAssetsExportZip } from './exportZip.js';
 import type { FlattenedAsset } from './manifest.js';
 import { buildAssetPoses } from './poses.js';
-import { allCustomAssetCatalog, getCustomAssetsByIds, listCustomAssets } from './query.js';
+import {
+  allCustomAssetCatalog,
+  getCustomAssetsByIds,
+  getPublicCustomAssetByAssetId,
+  listCustomAssets,
+} from './query.js';
 import {
   assetDownloadQuerySchema,
   assetFramesResponseSchema,
@@ -229,7 +234,7 @@ export function registerAssetRoutes(app: FastifyInstance, { db }: AssetRoutesDep
     { schema: { params: assetIdParamsSchema, response: customAssetDetailResponseSchema } },
     async (request) => {
       const { assetId } = request.params;
-      const [asset] = await db.select().from(schema.customAssets).where(eq(schema.customAssets.assetId, assetId));
+      const asset = await getPublicCustomAssetByAssetId(db, assetId);
       if (!asset) throw ApiError.notFound(`No custom asset "${assetId}".`);
 
       const author = await authorForLayout(db, asset.authorUserId);
@@ -248,7 +253,7 @@ export function registerAssetRoutes(app: FastifyInstance, { db }: AssetRoutesDep
     { schema: { params: assetIdParamsSchema } },
     async (request, reply) => {
       const { assetId } = request.params;
-      const [asset] = await db.select().from(schema.customAssets).where(eq(schema.customAssets.assetId, assetId));
+      const asset = await getPublicCustomAssetByAssetId(db, assetId);
       if (!asset || asset.source === 'builtin') throw ApiError.notFound(`No custom asset "${assetId}".`);
 
       reply.header('cache-control', PUBLIC_REVALIDATED);
@@ -274,7 +279,7 @@ export function registerAssetRoutes(app: FastifyInstance, { db }: AssetRoutesDep
     { schema: { params: assetIdParamsSchema, response: singleAssetCatalogResponseSchema } },
     async (request) => {
       const { assetId } = request.params;
-      const [asset] = await db.select().from(schema.customAssets).where(eq(schema.customAssets.assetId, assetId));
+      const asset = await getPublicCustomAssetByAssetId(db, assetId);
       if (asset?.source !== 'custom') throw ApiError.notFound(`No custom asset "${assetId}".`);
 
       const sprites = asset.sprites as Record<string, unknown>;
@@ -302,7 +307,7 @@ export function registerAssetRoutes(app: FastifyInstance, { db }: AssetRoutesDep
     { schema: { params: assetIdParamsSchema } },
     async (request, reply) => {
       const { assetId } = request.params;
-      const [asset] = await db.select().from(schema.customAssets).where(eq(schema.customAssets.assetId, assetId));
+      const asset = await getPublicCustomAssetByAssetId(db, assetId);
       if (!asset) throw ApiError.notFound(`No custom asset "${assetId}".`);
 
       const sprite = representativeSpriteGrid(asset);
@@ -328,7 +333,7 @@ export function registerAssetRoutes(app: FastifyInstance, { db }: AssetRoutesDep
     { schema: { params: assetIdParamsSchema, response: assetFramesResponseSchema } },
     async (request, reply) => {
       const { assetId } = request.params;
-      const [asset] = await db.select().from(schema.customAssets).where(eq(schema.customAssets.assetId, assetId));
+      const asset = await getPublicCustomAssetByAssetId(db, assetId);
       if (!asset) throw ApiError.notFound(`No custom asset "${assetId}".`);
 
       reply.header('cache-control', 'public, max-age=60, must-revalidate');

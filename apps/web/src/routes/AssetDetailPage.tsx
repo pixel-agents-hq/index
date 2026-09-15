@@ -1,7 +1,10 @@
-import { Link, useParams } from 'react-router-dom';
+import { useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 
-import { apiUrl, getAsset } from '../api/client';
+import { ApiError, apiUrl, getAsset } from '../api/client';
+import { deleteAsset } from '../api/manageClient';
 import { useApi } from '../api/useApi';
+import { useAuth } from '../auth/authState';
 import { AssetPreview } from '../components/AssetPreview';
 import { AuthorLink } from '../components/AuthorLink';
 import { ErrorNotice } from '../components/ErrorNotice';
@@ -14,7 +17,11 @@ export function AssetDetailPage() {
   const { id } = useParams<{ id: string }>();
   if (id === undefined) throw new Error('AssetDetailPage rendered without an :id param.');
 
+  const navigate = useNavigate();
+  const { accessToken, user } = useAuth();
   const assetState = useApi((signal) => getAsset(id, signal), [id]);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<ApiError | null>(null);
 
   if (assetState.status === 'loading') {
     return <p className="text-muted">Loading…</p>;
@@ -24,6 +31,42 @@ export function AssetDetailPage() {
   }
 
   const asset = assetState.data;
+
+  // #125: owner or moderator, custom assets only — a built-in row is synced
+  // from the read-only vendor pin, not user content, and the API rejects a
+  // delete attempt on one regardless (assets/manage.ts). `discordId` is the
+  // only ownership signal this public detail response carries
+  // (`PublicAuthor`), the same convention `AuthorLink` already relies on
+  // (#61/#62). The button only RENDERS for someone who can actually delete —
+  // never shown-but-disabled — same as `MyLayoutsPage`'s `canEdit` gating.
+  const isOwner = user !== null && user.discordId !== null && user.discordId === asset.author.discordId;
+  const isModerator = user?.role === 'moderator' || user?.role === 'admin';
+  const canDelete = asset.source === 'custom' && accessToken !== null && (isOwner || isModerator);
+
+  async function remove() {
+    if (!accessToken) return;
+    if (!confirm(`Delete "${asset.name}"? This cannot be undone.`)) return;
+
+    // Deleting someone ELSE's asset is moderation and needs a reason — "no
+    // silent moderation" (#10), same rule the API enforces. Deleting your
+    // own needs none, moderator or not.
+    let reason: string | undefined;
+    if (!isOwner) {
+      const input = prompt("Reason for deleting this asset (required, since it isn't yours):");
+      if (!input) return;
+      reason = input;
+    }
+
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteAsset(asset.assetId, accessToken, reason);
+      void navigate('/assets');
+    } catch (caught) {
+      setDeleteError(caught instanceof ApiError ? caught : new ApiError(0, 'Something unexpected went wrong.'));
+      setDeleting(false);
+    }
+  }
 
   return (
     <article>
@@ -87,7 +130,18 @@ export function AssetDetailPage() {
             Download
           </a>
         )}
+        {canDelete && (
+          <button
+            type="button"
+            onClick={() => void remove()}
+            disabled={deleting}
+            className="border-2 border-danger px-3 py-1.5 text-sm text-danger hover:border-danger disabled:opacity-50"
+          >
+            {deleting ? 'Deleting…' : 'Delete'}
+          </button>
+        )}
       </p>
+      {deleteError && <ErrorNotice error={deleteError} />}
 
       <div className="mt-4 inline-block border-2 border-border bg-canvas p-4">
         <AssetPreview
