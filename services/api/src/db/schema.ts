@@ -149,6 +149,12 @@ export const auditAction = pgEnum('audit_action', [
   'report.dismiss',
   /** #101: a custom furniture asset published via POST /api/v1/assets. */
   'asset.create',
+  /**
+   * #125: owner or moderator, same "no silent moderation" reason rule as
+   * `layout.delete` — sets `customAssets.deletedAt` rather than removing the
+   * row, so `assetId` stays permanently reserved (see that column's comment).
+   */
+  'asset.delete',
   /** #101: a moderator-issued machine credential for bot-originated asset uploads. */
   'apikey.create',
   'apikey.revoke',
@@ -372,9 +378,13 @@ export const layoutTags = pgTable(
  * `manifest` jsonb blob, not in separate columns, so there was nothing else
  * to make conditional).
  *
- * No `visibility` column: #101 explicitly decided there is no moderator
- * pre-publish review and no hide/delete flow for a first version — add one
- * later if asked for, rather than carrying dead states now.
+ * No `visibility` column, unlike layouts: #101 explicitly decided there is
+ * no moderator pre-publish review and deferred hide/delete to a later
+ * version rather than carrying dead states up front. #125 fulfills that
+ * deferral — see `deletedAt` below — with the minimal shape this actually
+ * needs (deleted-or-not) instead of importing layouts' full
+ * public/hidden/deleted enum for a feature with no public/hidden
+ * distinction to make.
  *
  * Also holds the bundled Pixel Agents catalog (`source: 'builtin'`), synced
  * in by `assets/builtinSync.ts` at boot — see that file and
@@ -452,6 +462,21 @@ export const customAssets = pgTable(
      */
     sourceCommit: text('source_commit'),
 
+    /**
+     * #125's whole soft-delete mechanism: null is live, set is gone. Owner
+     * or moderator, via `DELETE /api/v1/assets/:assetId`
+     * (`assets/manage.ts`) — never a hard `DELETE FROM`, because `assetId`
+     * is embedded in every public URL (this route, `/download`,
+     * `/sprite.png`, `/frames`, catalog merges) and must stay permanently
+     * reserved once issued, the same reasoning `layouts.slug` never being
+     * reused after a layout's `deleted` visibility already established.
+     * Every public read (query.ts) filters this column to null; the
+     * moderation-action row for the delete itself (`asset.delete`, above)
+     * carries the reason, not a column here — there is no "why" to display
+     * anywhere once a deleted asset already 404s for every visitor.
+     */
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -475,11 +500,20 @@ export const customAssets = pgTable(
       'custom_assets_source_commit_by_source',
       sql`(${table.source} = 'builtin' AND ${table.sourceCommit} IS NOT NULL) OR (${table.source} = 'custom' AND ${table.sourceCommit} IS NULL)`,
     ),
+    // Defense in depth alongside assets/manage.ts's own 403: a builtin row
+    // is synced from the read-only vendor pin, never user content, so it
+    // can never be soft-deleted even if a future write path forgets the
+    // application-level check this table's other rows rely on.
+    check(
+      'custom_assets_builtin_never_deleted',
+      sql`${table.source} = 'custom' OR ${table.deletedAt} IS NULL`,
+    ),
     index('custom_assets_author_idx').on(table.authorUserId),
     index('custom_assets_public_created_idx').on(table.createdAt.desc(), table.id.desc()),
     index('custom_assets_category_idx').on(table.category),
     index('custom_assets_kind_idx').on(table.assetKind),
     index('custom_assets_source_idx').on(table.source),
+    index('custom_assets_deleted_idx').on(table.deletedAt),
     // GIN so the facet filter's `&&`/`@>` conditions (query.ts) are index
     // scans, not sequential scans over every asset.
     index('custom_assets_tags_idx').using('gin', table.tags),

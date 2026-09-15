@@ -116,3 +116,18 @@ export function deleteLayout(slug: string, accessToken: string, reason?: string)
     ...(reason !== undefined ? { body: { reason } } : {}),
   });
 }
+
+/**
+ * Owner or moderator (#125) — same shape as `deleteLayout` above: a
+ * moderator deleting someone else's custom asset must pass `reason`, an
+ * owner deleting their own does not, and omitting the param entirely keeps
+ * the call bodyless for that common case.
+ */
+export function deleteAsset(assetId: string, accessToken: string, reason?: string): Promise<void> {
+  return apiRequest(`/api/v1/assets/${encodeURIComponent(assetId)}`, {
+    method: 'DELETE',
+    accessToken,
+    parseAs: 'none',
+    ...(reason !== undefined ? { body: { reason } } : {}),
+  });
+}
