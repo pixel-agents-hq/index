@@ -4,16 +4,14 @@ import { createRoot } from 'react-dom/client';
 
 import { RadioApp } from './RadioApp';
 
-// Wear the page's theme (src/theme/ThemeProvider.tsx sets data-theme on its
-// <html>): the frame is same-origin, so it can simply watch it.
+// Wear the page's color-scheme: a frame whose scheme differs from its
+// embedder's is painted opaque, and this one has to float over the page.
 const page = window.parent === window ? null : window.parent.document.documentElement;
-function syncTheme(): void {
-  const theme = page?.dataset.theme;
-  if (theme) document.documentElement.dataset.theme = theme;
-  else delete document.documentElement.dataset.theme;
+function syncScheme(): void {
+  if (page) document.documentElement.style.colorScheme = getComputedStyle(page).colorScheme;
 }
-syncTheme();
-if (page) new MutationObserver(syncTheme).observe(page, { attributes: true, attributeFilter: ['data-theme'] });
+syncScheme();
+if (page) new MutationObserver(syncScheme).observe(page, { attributes: true, attributeFilter: ['data-theme', 'style', 'class'] });
 
 // Duplicated from src/main.tsx on purpose — see the note there.
 const root = document.getElementById('root');

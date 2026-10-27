@@ -140,7 +140,7 @@ describe('SoundtracksPage', () => {
       { channel: RADIO_CHANNEL, type: 'play', code: 'TOWN-5-8F3A21C0' },
       window.location.origin,
     );
-    say({ channel: RADIO_CHANNEL, type: 'state', code: 'TOWN-5-8F3A21C0', playing: true, blocked: false });
+    say({ channel: RADIO_CHANNEL, type: 'state', code: 'TOWN-5-8F3A21C0', playing: true, blocked: false, hidden: false });
     fireEvent.click(screen.getByRole('button', { name: 'Pause' }));
     expect(postMessage).toHaveBeenLastCalledWith({ channel: RADIO_CHANNEL, type: 'pause' }, window.location.origin);
   });
@@ -219,7 +219,7 @@ describe('SoundtracksPage', () => {
       { channel: RADIO_CHANNEL, type: 'play', code: 'NIGHT-2-00000ABC' },
       window.location.origin,
     );
-    say({ channel: RADIO_CHANNEL, type: 'state', code: 'NIGHT-2-00000ABC', playing: true, blocked: false });
+    say({ channel: RADIO_CHANNEL, type: 'state', code: 'NIGHT-2-00000ABC', playing: true, blocked: false, hidden: false });
     fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
     expect(postMessage).toHaveBeenLastCalledWith({ channel: RADIO_CHANNEL, type: 'pause' }, window.location.origin);
   });
@@ -240,4 +240,23 @@ describe('SoundtracksPage', () => {
     expect(screen.getByRole('button', { name: 'Publish' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Try it' })).toBeDisabled();
   });
+
+  it('fits the frame to Pixel Agents’ player, and offers the way back when it was hidden', async () => {
+    stubApi();
+    renderPage();
+    await screen.findByText('TOWN-5-8F3A21C0');
+    const { postMessage, say } = radioFrame();
+    const frame = screen.getByTitle('Office radio');
+
+    say({ channel: RADIO_CHANNEL, type: 'size', height: 362 });
+    expect(frame.style.height).toBe('362px');
+
+    // "Hide player" in the player's own settings panel.
+    say({ channel: RADIO_CHANNEL, type: 'state', code: 'TOWN-5-8F3A21C0', playing: false, blocked: false, hidden: true });
+    fireEvent.click(screen.getByRole('button', { name: 'Show the radio' }));
+    expect(postMessage).toHaveBeenLastCalledWith({ channel: RADIO_CHANNEL, type: 'show' }, window.location.origin);
+    say({ channel: RADIO_CHANNEL, type: 'state', code: 'TOWN-5-8F3A21C0', playing: false, blocked: false, hidden: false });
+    expect(screen.queryByRole('button', { name: 'Show the radio' })).not.toBeInTheDocument();
+  });
 });
+

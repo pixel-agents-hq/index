@@ -458,11 +458,22 @@ hand-kept copy of upstream's `parseSongCode` (`songCode.ts`), checked against
 upstream's own parser by `songCode.test.ts`. One entry per tune per publisher.
 
 `/soundtracks` shows each code with a one-click **Copy**, and **Play** hears it on
-Pixel Agents' own radio, in the `radio.html` frame (`live-office/radioProtocol.ts`): a
-frame because vendor code only compiles in `src/live-office`, and a visible player bar
-with its own ▶ because browsers start audio only from a click inside the playing
-document. The frame also names each tune with upstream's composer. Author pages list a
-publisher's soundtracks beside their assets.
+**Pixel Agents' own radio player, unmodified** (`music/MusicPlayer.tsx`: play, skip,
+volume, the visualizer and its settings panel with the moods and the song code to copy
+or paste and play), in the `radio.html` frame (`live-office/RadioApp.tsx`,
+`radioProtocol.ts`) pinned to the page's bottom-right corner as it sits in the office.
+It's a frame because vendor code only compiles in `src/live-office` and upstream's
+Tailwind theme redefines the site's tokens. It's transparent and sized to the player as
+the frame reports it (the settings panel opens above the bar), so the page stays
+clickable around it. Browsers start audio only from a click inside the playing document,
+so when a page-side Play is refused the player's own ▶ always works. The player's
+*Hide player* points at Pixel Agents' Settings, which the index doesn't have, so the page
+shows **Show the radio** while it's hidden, and playing a soundtrack brings it back.
+
+The publish form also lets anyone **try a code before publishing**: as it's typed, the
+frame checks it with upstream's parser and names it with upstream's composer, and
+**Try it** plays it on that same player. A code the radio can't play is flagged and
+can't be published. Author pages list a publisher's soundtracks beside their assets.
 
 ## See also
 

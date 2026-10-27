@@ -1,14 +1,16 @@
 /**
  * The postMessage vocabulary between the soundtracks page and the
- * `radio.html` frame — the player bar where Pixel Agents' own office radio
- * (`music/musicEngine.ts`, `composer.ts`) plays a published song code.
+ * `radio.html` frame — Pixel Agents' own office radio player, unmodified
+ * (`music/MusicPlayer.tsx` with its settings panel: mood, song code; the
+ * engine `musicEngine.ts`, `composer.ts`), which plays a published song code.
  *
- * A frame for the same reason as `live-office.html` (`protocol.ts`): the
+ * A frame for the same reasons as `live-office.html` (`protocol.ts`): the
  * radio is vendor code, and vendor sources only compile in this directory's
- * relaxed project. And a *visible* frame with its own ▶, because a browser
- * lets a document start audio only from a click inside that document: the
- * page's Play buttons cue a tune and ask the frame to start it, and when the
- * browser says no (`blocked`) the frame's own ▶ always can.
+ * relaxed project; upstream's Tailwind theme redefines the site's token
+ * names. And a *visible* frame, the player itself, because a browser lets a
+ * document start audio only from a click inside that document: the page's
+ * Play buttons cue a tune and ask the frame to start it, and when the
+ * browser says no (`blocked`) the player's own ▶ always can.
  *
  * Deliberately free of vendor imports — the strict app project imports it.
  */
@@ -35,7 +37,17 @@ export interface PauseTuneMessage {
   type: 'pause';
 }
 
-export type RadioCommand = DescribeTunesMessage | PlayTuneMessage | PauseTuneMessage;
+/**
+ * Page → frame: show the player again. Its settings panel has upstream's own
+ * "Hide player" (its note points at Pixel Agents' Settings, which the index
+ * doesn't have), so the page offers the way back.
+ */
+export interface ShowPlayerMessage {
+  channel: typeof RADIO_CHANNEL;
+  type: 'show';
+}
+
+export type RadioCommand = DescribeTunesMessage | PlayTuneMessage | PauseTuneMessage | ShowPlayerMessage;
 
 export interface TuneDescription {
   /** The code as the radio writes it (upper case, the seed as 8 hex digits) — what `state.code` reports while it plays. */
@@ -64,14 +76,23 @@ export interface TunesDescribedMessage {
 export interface RadioStateMessage {
   channel: typeof RADIO_CHANNEL;
   type: 'state';
-  /** The tune on (canonical song code), or null before anything was cued. */
+  /** The tune on the player (canonical song code), playing or not. */
   code: string | null;
   playing: boolean;
   /** The browser refused to start audio without a click in the frame: press its ▶. */
   blocked: boolean;
+  /** The player was hidden from its settings panel ("Hide player"). */
+  hidden: boolean;
 }
 
-export type RadioEvent = RadioReadyMessage | TunesDescribedMessage | RadioStateMessage;
+/** Frame → page: how tall the player is now (its settings panel opens above it), so the frame fits it. */
+export interface RadioSizeMessage {
+  channel: typeof RADIO_CHANNEL;
+  type: 'size';
+  height: number;
+}
+
+export type RadioEvent = RadioReadyMessage | TunesDescribedMessage | RadioStateMessage | RadioSizeMessage;
 
 /** A message on this channel, its fields not yet checked. */
 type Unchecked = Record<string, unknown>;
@@ -89,6 +110,7 @@ export function isRadioCommand(data: unknown): data is RadioCommand {
     case 'play':
       return typeof message.code === 'string';
     case 'pause':
+    case 'show':
       return true;
     default:
       return false;
@@ -109,7 +131,13 @@ export function isRadioEvent(data: unknown): data is RadioEvent {
         message.invalid.every((code: unknown) => typeof code === 'string')
       );
     case 'state':
-      return typeof message.playing === 'boolean' && typeof message.blocked === 'boolean';
+      return (
+        typeof message.playing === 'boolean' &&
+        typeof message.blocked === 'boolean' &&
+        typeof message.hidden === 'boolean'
+      );
+    case 'size':
+      return typeof message.height === 'number' && Number.isFinite(message.height) && message.height >= 0;
     default:
       return false;
   }

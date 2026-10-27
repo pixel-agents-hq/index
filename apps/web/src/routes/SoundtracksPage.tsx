@@ -105,7 +105,7 @@ export function SoundtracksPage() {
   }
 
   return (
-    <div className="pb-20">
+    <div className="pb-28">
       <h1 className="font-display text-2xl text-ink">Soundtracks</h1>
       <p className="mt-1 max-w-2xl text-sm text-muted">
         Favourite tunes from the Pixel Agents office radio. Every tune is a song code: copy
@@ -172,7 +172,12 @@ export function SoundtracksPage() {
         </button>
       )}
 
-      <div className="fixed inset-x-0 bottom-0 z-20 border-t-2 border-border bg-surface">{radio.frame}</div>
+      {radio.frame}
+      {radio.state.hidden && (
+        <button type="button" onClick={radio.show} className={`${buttonClass} fixed bottom-3 right-3 z-20 bg-surface`}>
+          Show the radio
+        </button>
+      )}
     </div>
   );
 }
