@@ -28,6 +28,15 @@ const TILE_SIZE = 16;
  */
 const ZOOM = 2;
 const MARGIN_TILES = 1;
+/**
+ * Upstream's browser App swaps in its mobile shell at `(max-width: 768px)`
+ * (MOBILE_MEDIA_QUERY in webview-ui/src/constants.ts, #404), and that shell's
+ * bottom card bar shrinks the office region and moves the map off the
+ * centre computed below. A viewport sized to a narrow layout falls under it,
+ * so the viewport never goes narrower than this. Its coarse-pointer clause
+ * never matches: headless Chromium reports a fine pointer.
+ */
+const MIN_VIEWPORT_WIDTH = 769;
 
 /**
  * An element screenshot captures the page region, not the element in isolation,
@@ -178,7 +187,7 @@ export function unionBox(a: CanvasBox, b: CanvasBox | null): CanvasBox {
  * upstream actually painted. See there for why.
  */
 export function renderGeometry(layout: Pick<Layout, 'cols' | 'rows' | 'tiles'>): RenderGeometry {
-  const width = (layout.cols + MARGIN_TILES * 2) * TILE_SIZE * ZOOM;
+  const width = Math.max((layout.cols + MARGIN_TILES * 2) * TILE_SIZE * ZOOM, MIN_VIEWPORT_WIDTH);
   const height = (layout.rows + MARGIN_TILES * 2) * TILE_SIZE * ZOOM;
 
   const scale = TILE_SIZE * ZOOM;
@@ -291,14 +300,9 @@ export class Renderer {
 
     try {
       // Turn on upstream's test hooks so we can wait on real render state
-      // instead of sleeping and hoping. And keep the desktop shell: the
-      // viewport is sized to the layout, so anything up to 22 columns is under
-      // upstream's 768px mobile breakpoint, whose bottom card bar would shrink
-      // the office region and shift the map off the geometry renderGeometry()
-      // assumes.
+      // instead of sleeping and hoping.
       await context.addInitScript(() => {
         window.__PIXEL_AGENTS_E2E = true;
-        window.__PIXEL_AGENTS_FORCE_DESKTOP = true;
       });
       const page = await context.newPage();
 

@@ -55,8 +55,25 @@ describe('renderGeometry (#71)', () => {
     expect(box.maxY - box.minY + 1).toBe(27 * TILE_PX);
   });
 
+  it('never sizes the viewport under the upstream mobile breakpoint', () => {
+    // Upstream's mobile shell starts at (max-width: 768px) and would move the
+    // map; a narrow layout keeps the desktop layout by getting extra width,
+    // which the centring below absorbs.
+    expect(renderGeometry(padded(10, 8, 0, 0, 10, 8)).width).toBe(769);
+    expect(renderGeometry(padded(21, 22, 0, 0, 21, 22)).width).toBe(769);
+    expect(renderGeometry(padded(23, 22, 0, 0, 23, 22)).width).toBe((23 + 2) * TILE_PX);
+  });
+
+  it('centres a narrow layout in the widened viewport', () => {
+    // floor((769 - 10 * 32) / 2) = 224, exactly as upstream's renderOffice()
+    // floors it, so the crop still lands on the tiles.
+    const { box } = renderGeometry(padded(10, 8, 0, 0, 10, 8));
+    expect(box.minX).toBe(224);
+    expect(box.maxX).toBe(224 + 10 * TILE_PX - 1);
+  });
+
   it('crops nothing when the layout occupies its whole canvas', () => {
-    const { width, height, box } = renderGeometry(padded(10, 8, 0, 0, 10, 8));
+    const { width, height, box } = renderGeometry(padded(30, 8, 0, 0, 30, 8));
     // One margin tile on each side, and that margin is what gets trimmed.
     expect(box.minX).toBe(TILE_PX);
     expect(box.minY).toBe(TILE_PX);
