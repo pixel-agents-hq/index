@@ -20,6 +20,8 @@ declare global {
   interface Window {
     /** Set before navigation; upstream only installs its test hooks when it is true. */
     __PIXEL_AGENTS_E2E?: boolean;
+    /** Set before navigation; keeps upstream's desktop shell below its mobile breakpoint. */
+    __PIXEL_AGENTS_FORCE_DESKTOP?: boolean;
     __pixelAgentsTestHooks?: {
       /** Appears once the app has mounted, which is what render.ts waits on. */
       getFurnitureCount?: () => number;

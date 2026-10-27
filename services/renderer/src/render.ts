@@ -291,9 +291,14 @@ export class Renderer {
 
     try {
       // Turn on upstream's test hooks so we can wait on real render state
-      // instead of sleeping and hoping.
+      // instead of sleeping and hoping. And keep the desktop shell: the
+      // viewport is sized to the layout, so anything up to 22 columns is under
+      // upstream's 768px mobile breakpoint, whose bottom card bar would shrink
+      // the office region and shift the map off the geometry renderGeometry()
+      // assumes.
       await context.addInitScript(() => {
         window.__PIXEL_AGENTS_E2E = true;
+        window.__PIXEL_AGENTS_FORCE_DESKTOP = true;
       });
       const page = await context.newPage();
 
