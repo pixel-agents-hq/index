@@ -19,7 +19,7 @@
  * that has any; the renderer decides what a given layout actually uses.
  */
 
-import type { CharacterFrames } from '../assets/decodeCharacter.js';
+import { type CharacterFrames, currentCharacterFrames } from '../assets/decodeCharacter.js';
 import type { PetFrames } from '../assets/decodePet.js';
 import type { FlattenedAsset } from '../assets/manifest.js';
 import { allCustomAssetCatalog, customAssetsOfKind } from '../assets/query.js';
@@ -86,7 +86,8 @@ async function allCharacters(db: AnyDatabase): Promise<RenderCustomAsset[]> {
   return rows.map((row) => {
     const manifest = row.manifest as [{ id: string }];
     const sprites = row.sprites as Record<string, CharacterFrames>;
-    return { kind: 'character', sprites: sprites[manifest[0].id] as CharacterFrames };
+    // Rows decoded before upstream's seated frame hold 7 frames a row.
+    return { kind: 'character', sprites: currentCharacterFrames(sprites[manifest[0].id] as CharacterFrames) };
   });
 }
 

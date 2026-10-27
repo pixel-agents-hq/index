@@ -123,7 +123,7 @@ describe('buildAssetPoses — furniture', () => {
 
 describe('buildAssetPoses — character', () => {
   function frameRow(label: string): string[][][] {
-    return Array.from({ length: 7 }, (_, i) => grid(`#${label}${i}`));
+    return Array.from({ length: 8 }, (_, i) => grid(`#${label}${i}`));
   }
 
   it('gives a walking pose per direction, plus a mirrored left reusing right', () => {
@@ -134,11 +134,11 @@ describe('buildAssetPoses — character', () => {
     const left = poses.find((p) => p.key === 'left');
     expect(left?.mirror).toBe(true);
     expect(left?.frames).toEqual(right?.frames);
-    // Only the walk-cycle slice (3 of the 7 frames), not the typing/reading frames too.
+    // Only the walk-cycle slice (3 of the 8 frames), not the typing/reading frames too.
     expect(right?.frames).toHaveLength(3);
   });
 
-  it('also gives a typing pose and a reading pose per direction, sliced from the same 7-frame row', () => {
+  it('also gives a typing pose and a reading pose per direction, sliced from the same 8-frame row', () => {
     const frames: CharacterFrames = { down: frameRow('D'), up: frameRow('U'), right: frameRow('R') };
     const poses = buildAssetPoses({ assetKind: 'character', manifest: [{ id: 'CHAR_0' }], sprites: { CHAR_0: frames } });
 
@@ -155,6 +155,10 @@ describe('buildAssetPoses — character', () => {
       'reading-up',
       'reading-right',
       'reading-left',
+      'seated-down',
+      'seated-up',
+      'seated-right',
+      'seated-left',
     ]);
 
     const typingRight = poses.find((p) => p.key === 'typing-right');
@@ -169,6 +173,20 @@ describe('buildAssetPoses — character', () => {
     expect(readingDown?.label).toBe('Reading · Down');
     // Frames [3,4] (typing) and [5,6] (reading) — distinct from each other and from walk's [0-2].
     expect(readingDown?.frames).not.toEqual(typingDown?.frames);
+
+    const seatedDown = poses.find((p) => p.key === 'seated-down');
+    expect(seatedDown?.label).toBe('Seated · Down');
+    expect(seatedDown?.frames).toHaveLength(1);
+  });
+
+  it('derives the seated pose for a row stored with 7 frames, before the seated frame existed', () => {
+    // Full-size frames: a derived seated frame is always 16×32.
+    const stored = (label: string) => Array.from({ length: 7 }, (_, i) => grid(`#${label}${i}`, 16, 32));
+    const frames: CharacterFrames = { down: stored('D'), up: stored('U'), right: stored('R') };
+    const poses = buildAssetPoses({ assetKind: 'character', manifest: [{ id: 'CHAR_0' }], sprites: { CHAR_0: frames } });
+    expect(poses.find((p) => p.key === 'seated-right')?.frames).toEqual(
+      poses.find((p) => p.key === 'typing-right')?.frames.slice(0, 1),
+    );
   });
 });
 

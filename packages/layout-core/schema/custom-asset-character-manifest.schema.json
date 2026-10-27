@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/pixel-agents-hq/index/packages/layout-core/schema/custom-asset-character-manifest.schema.json",
   "title": "Pixel Index custom character manifest",
-  "description": "Shape of the manifest.json inside a custom-character upload zip for POST /api/v1/assets (#105). Mirrors services/api/src/assets/decodeCharacter.ts's manifest validation field-for-field, including its permissiveness: unknown properties are not rejected. Identical shape to custom-asset-pet-manifest.schema.json by design — a character and a pet are told apart by their PNG's dimensions/layout, not by manifest shape. See docs/custom-asset-zip-contract.md for the zip-level rules (manifest.json alongside a single 112x96 PNG) this schema doesn't cover.",
+  "description": "Shape of the manifest.json inside a custom-character upload zip for POST /api/v1/assets (#105). Mirrors services/api/src/assets/decodeCharacter.ts's manifest validation field-for-field, including its permissiveness: unknown properties are not rejected. Identical shape to custom-asset-pet-manifest.schema.json by design — a character and a pet are told apart by their PNG's dimensions/layout, not by manifest shape. See docs/custom-asset-zip-contract.md for the zip-level rules (manifest.json alongside a single 128x96 PNG, or a legacy 112x96 one) this schema doesn't cover.",
   "type": "object",
   "required": ["id", "name"],
   "properties": {

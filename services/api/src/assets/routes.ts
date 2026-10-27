@@ -17,7 +17,7 @@ import { ApiError } from '../errors.js';
 import type { RequestSchemas } from '../http.js';
 import { PUBLIC_REVALIDATED, respondNotModifiedIfMatching } from '../layouts/caching.js';
 import { authorForLayout, authorsForLayouts } from '../layouts/query.js';
-import type { CharacterFrames } from './decodeCharacter.js';
+import { type CharacterFrames, currentCharacterFrames } from './decodeCharacter.js';
 import type { PetFrames } from './decodePet.js';
 import { buildAssetsExportZip } from './exportZip.js';
 import type { FlattenedAsset } from './manifest.js';
@@ -292,7 +292,8 @@ export function registerAssetRoutes(app: FastifyInstance, { db }: AssetRoutesDep
           // `allCharacters`/`allPets` — a character/pet manifest always has
           // exactly one entry (see `decodeCharacter.ts`/`decodePet.ts`).
           const [entry] = asset.manifest as [{ id: string }];
-          return { ...base, character: sprites[entry.id] };
+          const frames = sprites[entry.id] as CharacterFrames | undefined;
+          return { ...base, character: frames && currentCharacterFrames(frames) };
         }
         case 'pet': {
           const [entry] = asset.manifest as [{ id: string }];
