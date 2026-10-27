@@ -20,6 +20,12 @@
  *                                             pixel-agents has no id/name
  *                                             concept for external characters
  *                                             at all, so one is not written)
+ *   character-profiles/<assetId>.json       (a character published as a
+ *                                             profile, `decodeProfile.ts`: its
+ *                                             config for the Characters view's
+ *                                             "Load config", beside the sheet
+ *                                             above, which still works as an
+ *                                             external character as it is)
  *
  * Furniture is the interesting case: `custom_assets.manifest` stores the
  * *flattened* leaves (`FlattenedAsset[]`, one per rotation/state/animation
@@ -44,6 +50,7 @@ import JSZip from 'jszip';
 import type * as schema from '../db/schema.js';
 import { type CharacterFrames,encodeCharacterSheet } from './decodeCharacter.js';
 import { encodePetSheet, type PetFrames } from './decodePet.js';
+import { profileOf } from './decodeProfile.js';
 import type { FlattenedAsset, FurnitureManifest, ManifestAsset, ManifestGroup, ManifestNode } from './manifest.js';
 import { encodeSpritePng } from './spritePng.js';
 
@@ -197,6 +204,8 @@ function addCharacter(zip: JSZip, asset: schema.CustomAsset, index: number): voi
   const frames = (asset.sprites as Record<string, CharacterFrames>)[entry.id];
   if (!frames) return;
   zip.file(`assets/characters/char_${index}.png`, encodeCharacterSheet(frames));
+  const profile = profileOf(asset.manifest);
+  if (profile) zip.file(`character-profiles/${asset.assetId}.json`, JSON.stringify(profile, null, 2));
 }
 
 /**

@@ -40,6 +40,8 @@ import { registerMetaRoutes } from './meta.js';
 import { registerAuditRoutes } from './moderation/auditRoutes.js';
 import { registerModerationRoutes } from './moderation/routes.js';
 import { API_VERSION, registerRootRoutes } from './root.js';
+import { registerSoundtrackRoutes } from './soundtracks/routes.js';
+import { soundtrackSharedSchemas } from './soundtracks/schemas.js';
 import { registerUserAdminRoutes } from './users/routes.js';
 
 export interface BuildServerDeps {
@@ -154,6 +156,7 @@ export async function buildServer({ config, pool, db }: BuildServerDeps): Promis
 
   for (const schema of sharedSchemas) app.addSchema(schema);
   for (const schema of assetSharedSchemas) app.addSchema(schema);
+  for (const schema of soundtrackSharedSchemas) app.addSchema(schema);
 
   // Built once, shared by every route that needs to validate a layout against
   // the pinned upstream (submit's POST, manage's PUT .../layout) — see
@@ -170,6 +173,7 @@ export async function buildServer({ config, pool, db }: BuildServerDeps): Promis
   registerAssetRoutes(app, { db });
   registerAssetSubmitRoutes(app, { config, db });
   registerAssetManageRoutes(app, { db });
+  registerSoundtrackRoutes(app, { config, db });
   registerApiKeyRoutes(app, { config, db });
   registerManageRoutes(app, { config, db, upstream });
   registerUserAdminRoutes(app, { config, db });

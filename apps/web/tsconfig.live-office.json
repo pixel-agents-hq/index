@@ -14,7 +14,16 @@
     // If the pin ever moves to an upstream that satisfies them, delete these
     // two lines and this project folds back into tsconfig.app.json.
     "noUncheckedIndexedAccess": false,
-    "exactOptionalPropertyTypes": false
+    "exactOptionalPropertyTypes": false,
+
+    // One React's types, the index's, for vendor sources too — the same thing
+    // vite.config.ts's `dedupe` does for the bundle. A vendor checkout with its
+    // own node_modules (the vendor harness installs one) otherwise resolves
+    // its imports to a second @types/react, and the two `React.Ref`s clash.
+    "paths": {
+      "react": ["../../node_modules/@types/react/index.d.ts"],
+      "react/*": ["../../node_modules/@types/react/*"]
+    }
   },
   // vite-env.d.ts carries __PIXEL_AGENTS_COMMIT__, which assets.ts addresses
   // the immutable asset directory with.

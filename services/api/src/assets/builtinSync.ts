@@ -1,6 +1,7 @@
 /**
  * Syncs the built-in Pixel Agents catalog (`vendor/pixel-agents/webview-ui/
- * public/assets/{furniture,characters,pets}`) into `custom_assets`, tagged
+ * public/assets/{furniture,pets}`, plus upstream's default character
+ * profiles from `builtinProfiles.json`) into `custom_assets`, tagged
  * `source: 'builtin'`, so `GET /api/v1/assets` lists/filters/paginates
  * across built-in and uploaded assets uniformly. See `docs/custom-assets.md`'s
  * "Extending the gallery to built-in assets" section for the full design.
@@ -25,15 +26,18 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import { upstreamAssetsDir, upstreamPin } from '@pixel-index/layout-core';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import JSZip from 'jszip';
 
 import type { AnyDatabase } from '../db/client.js';
 import { PIXEL_AGENTS_SYSTEM_USER_ID } from '../db/constants.js';
 import * as schema from '../db/schema.js';
+import builtinProfiles from './builtinProfiles.json' with { type: 'json' };
 import { type DecodedFurnitureAsset, decodeFurnitureZip } from './decode.js';
 import { decodeCharacterZip,type DecodedCharacterAsset } from './decodeCharacter.js';
 import { type DecodedPetAsset, decodePetZip } from './decodePet.js';
+import { type DecodedProfileAsset, profileOf } from './decodeProfile.js';
+import { PROFILE_TAG } from './tags.js';
 import type { IdCollisionChecker } from './zip.js';
 
 export interface BuiltinSyncResult {
@@ -42,7 +46,7 @@ export interface BuiltinSyncResult {
   commit: string | null;
 }
 
-type DecodedAsset = DecodedFurnitureAsset | DecodedCharacterAsset | DecodedPetAsset;
+type DecodedAsset = DecodedFurnitureAsset | DecodedCharacterAsset | DecodedPetAsset | DecodedProfileAsset;
 
 async function buildZip(files: Record<string, Buffer | string>): Promise<Buffer> {
   const zip = new JSZip();
@@ -94,27 +98,40 @@ async function decodeBuiltinFurniture(
   return { decoded, zipBuffer };
 }
 
+/** One of upstream's default character profiles, as `apps/web/build/generateBuiltinProfiles.ts` wrote it. */
+export interface BuiltinProfile {
+  profile: { id?: string; name?: string } & Record<string, unknown>;
+  /** Its sheet, composed by upstream's own wardrobe renderer: a 128×96 PNG, base64. */
+  sheetPng: string;
+}
+
 /**
- * One `characters/char_N.png` vendor file. Upstream characters have no
- * manifest or id at all — `decodeCharacterZip` now requires one (#105
- * follow-up: custom character uploads carry `manifest.json` too, mirroring
- * pets), so a synthetic `{id, name}` manifest is built here the same way
- * `decodeBuiltinPet` already does for vendor pets, deriving the id from the
- * file's own index (`char_0.png` → `CHAR_0`).
+ * One of upstream's default character profiles. Upstream no longer bundles
+ * `characters/char_N.png`: its cast is profiles drawn from wardrobe parts,
+ * so a built-in character is published as a profile, the way an uploaded
+ * one is (`decodeProfile.ts`): its composed sheet decoded by
+ * `decodeCharacterZip` like any character, the profile kept beside it. The
+ * id comes from the profile's own (`char-0` → `CHAR_0`), the same ids the
+ * bundled `char_N.png` characters had, so their URLs keep working.
  */
-async function decodeBuiltinCharacter(
-  pngPath: string,
+async function decodeBuiltinProfile(
+  { profile, sheetPng }: BuiltinProfile,
   index: number,
-  label: string,
   isIdTaken: IdCollisionChecker,
-): Promise<{ decoded: DecodedCharacterAsset; zipBuffer: Buffer }> {
-  const syntheticManifest = { id: `CHAR_${index}`, name: label };
+): Promise<{ decoded: DecodedProfileAsset; zipBuffer: Buffer }> {
+  const id = (profile.id ?? `char-${index}`).toUpperCase().replace(/[^A-Z0-9]+/g, '_');
+  const name = profile.name || `Char ${index}`;
   const zipBuffer = await buildZip({
-    'manifest.json': JSON.stringify(syntheticManifest),
-    [path.basename(pngPath)]: fs.readFileSync(pngPath),
+    'manifest.json': JSON.stringify({ id, name }),
+    'char.png': Buffer.from(sheetPng, 'base64'),
+    'profile.json': JSON.stringify(profile, null, 2),
   });
   const decoded = await decodeCharacterZip(zipBuffer, isIdTaken);
-  return { decoded, zipBuffer };
+  const [entry] = decoded.manifest;
+  return {
+    decoded: { ...decoded, manifest: [{ ...entry, profile }], tags: [...decoded.tags, PROFILE_TAG] },
+    zipBuffer,
+  };
 }
 
 interface VendorPetManifest {
@@ -166,9 +183,38 @@ function toRow(decoded: DecodedAsset, zipBuffer: Buffer, commit: string): schema
   };
 }
 
-const CHARACTER_PNG_RE = /^char_(\d+)\.png$/;
+/**
+ * Whether the built-in profiles already stored are exactly `profiles`. The
+ * pinned commit alone can't say: the profiles come from this repo's
+ * `builtinProfiles.json`, not from the vendor tree, so the pin can stay put
+ * while they change — the first deploy carrying them landed on a database
+ * already synced at the same pin, without profiles, and the commit check
+ * alone kept it that way.
+ */
+/** JSON with object keys sorted — `jsonb` doesn't keep the order a profile was written in. */
+function canonicalJson(value: unknown): string {
+  return JSON.stringify(value, (_key, v: unknown) =>
+    v && typeof v === 'object' && !Array.isArray(v)
+      ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+      : v,
+  );
+}
 
-export async function syncBuiltinAssets(db: AnyDatabase, upstreamDir?: string): Promise<BuiltinSyncResult> {
+async function storedProfilesMatch(db: AnyDatabase, profiles: readonly BuiltinProfile[]): Promise<boolean> {
+  const rows = await db
+    .select({ manifest: schema.customAssets.manifest })
+    .from(schema.customAssets)
+    .where(and(eq(schema.customAssets.source, 'builtin'), eq(schema.customAssets.assetKind, 'character')));
+  const stored = rows.map((row) => canonicalJson(profileOf(row.manifest))).sort();
+  const expected = profiles.map((p) => canonicalJson(p.profile)).sort();
+  return stored.length === expected.length && stored.every((profile, i) => profile === expected[i]);
+}
+
+export async function syncBuiltinAssets(
+  db: AnyDatabase,
+  upstreamDir?: string,
+  profiles: readonly BuiltinProfile[] = builtinProfiles.profiles,
+): Promise<BuiltinSyncResult> {
   const pin = upstreamPin(upstreamDir);
   if (!pin.commit) {
     // Never delete existing builtin rows against an unresolvable identity —
@@ -182,7 +228,11 @@ export async function syncBuiltinAssets(db: AnyDatabase, upstreamDir?: string): 
     .selectDistinct({ sourceCommit: schema.customAssets.sourceCommit })
     .from(schema.customAssets)
     .where(eq(schema.customAssets.source, 'builtin'));
-  if (stored.length === 1 && stored[0]?.sourceCommit === pin.commit) {
+  if (
+    stored.length === 1 &&
+    stored[0]?.sourceCommit === pin.commit &&
+    (await storedProfilesMatch(db, profiles))
+  ) {
     return { synced: false, count: 0, commit: pin.commit };
   }
 
@@ -204,7 +254,7 @@ export async function syncBuiltinAssets(db: AnyDatabase, upstreamDir?: string): 
     const rows: schema.NewCustomAsset[] = [];
 
     // Deterministic processing order, so re-runs are reproducible: sorted
-    // furniture directories, then characters by index, then sorted pet
+    // furniture directories, then the default profiles in cast order, then sorted pet
     // directories.
     const furnitureDir = path.join(assetsDir, 'furniture');
     const furnitureIds = fs.existsSync(furnitureDir)
@@ -220,22 +270,8 @@ export async function syncBuiltinAssets(db: AnyDatabase, upstreamDir?: string): 
       rows.push(toRow(decoded, zipBuffer, commit));
     }
 
-    const charactersDir = path.join(assetsDir, 'characters');
-    const characterIndices = fs.existsSync(charactersDir)
-      ? fs
-          .readdirSync(charactersDir)
-          .map((name) => CHARACTER_PNG_RE.exec(name))
-          .filter((match): match is RegExpExecArray => match !== null)
-          .map((match) => Number(match[1]))
-          .sort((a, b) => a - b)
-      : [];
-    for (const n of characterIndices) {
-      const { decoded, zipBuffer } = await decodeBuiltinCharacter(
-        path.join(charactersDir, `char_${n}.png`),
-        n,
-        `Char ${n}`,
-        isIdTaken,
-      );
+    for (const [n, profile] of profiles.entries()) {
+      const { decoded, zipBuffer } = await decodeBuiltinProfile(profile, n, isIdTaken);
       claimed.add(decoded.assetId);
       rows.push(toRow(decoded, zipBuffer, commit));
     }

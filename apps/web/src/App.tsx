@@ -8,6 +8,7 @@ import { AssetsGallery } from './routes/AssetsGallery';
 import { AssetSubmitPage } from './routes/AssetSubmitPage';
 import { AuditLogPage } from './routes/AuditLogPage';
 import { AuthorPage } from './routes/AuthorPage';
+import { CharacterDesignerPage } from './routes/CharacterDesignerPage';
 import { DeveloperPage } from './routes/DeveloperPage';
 import { Home } from './routes/Home';
 import { LayoutDetailPage } from './routes/LayoutDetailPage';
@@ -15,6 +16,7 @@ import { LayoutEditorPage } from './routes/LayoutEditorPage';
 import { ModerationPage } from './routes/ModerationPage';
 import { MyLayoutsPage } from './routes/MyLayoutsPage';
 import { NotFound } from './routes/NotFound';
+import { SoundtracksPage } from './routes/SoundtracksPage';
 import { SubmitPage } from './routes/SubmitPage';
 
 /**
@@ -44,7 +46,9 @@ export function App() {
         {/* #101: custom-asset browsing/detail/upload, mirroring the layout routes above. */}
         <Route path="assets" element={<AssetsGallery />} />
         <Route path="assets/submit" element={<AssetSubmitPage />} />
+        <Route path="assets/design" element={<CharacterDesignerPage />} />
         <Route path="assets/:id" element={<AssetDetailPage />} />
+        <Route path="soundtracks" element={<SoundtracksPage />} />
         {/*
           Both editor routes render the same page — the difference is only
           where the layout comes from and where it goes (#65). The gate is

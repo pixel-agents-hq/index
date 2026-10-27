@@ -42,6 +42,13 @@ jobs:
       - name: The furniture category enum matches the pinned vendor manifests
         run: npm run furniture-categories:schema:check
 
+      # The built-in character profiles services/api publishes are the pinned
+      # vendor's default cast, composed by its own wardrobe renderer at
+      # generation time (apps/web/build/generateBuiltinProfiles.ts) — this is
+      # what stops them from silently drifting after a vendor bump.
+      - name: The built-in character profiles match the pinned vendor's default cast
+        run: npm run builtin-profiles:check
+
       # Builds @pixel-index/layout-core, then runs its CLI over seed/.
       - name: Validate the seed layouts against the pinned Pixel Agents
         run: npm run validate
@@ -204,7 +211,28 @@ jobs:
           submodules: recursive
 
       - name: Build the web Docker image
-        run: docker build -f apps/web/Dockerfile --build-arg VITE_API_BASE_URL=https://api.example.com .
+        run: docker build -f apps/web/Dockerfile --build-arg VITE_API_BASE_URL=https://api.example.com -t pixel-index-web .
+
+      # The image's nginx.conf decides which paths are app routes and which are
+      # build files, and the two share /assets/: a direct load (a reload, a
+      # shared link) of an app route under it once 404'd while in-app
+      # navigation worked. Load each kind for real.
+      - name: The web image serves app routes, build files and misses correctly
+        run: |
+          docker run -d --name web -p 8080:80 pixel-index-web
+          for i in $(seq 1 30); do curl -fsS http://localhost:8080/healthz >/dev/null && break; sleep 1; done
+          expect() { # path, status, header pattern
+            out=$(curl -s -o /dev/null -D - "http://localhost:8080$1")
+            echo "$out" | head -1 | grep -q " $2" || { echo "$1: expected $2, got: $(echo "$out" | head -1)"; exit 1; }
+            [ -z "$3" ] || echo "$out" | grep -qi "$3" || { echo "$1: missing header $3"; exit 1; }
+            echo "ok $1 -> $2"
+          }
+          for route in /layouts/ /assets /assets/ /assets/submit /assets/design /assets/CHAR_0 /soundtracks; do
+            expect "$route" 200 'content-type: text/html'
+          done
+          asset=$(docker exec web sh -c 'ls /usr/share/nginx/html/assets/*.js | head -1' | sed 's|/usr/share/nginx/html||')
+          expect "$asset" 200 'cache-control: public, max-age=31536000, immutable'
+          expect /assets/no-such-file.js 404
 
   renderer:
     name: Renderer integration tests

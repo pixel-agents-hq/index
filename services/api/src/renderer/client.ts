@@ -76,3 +76,53 @@ export async function requestPreview(
     clearTimeout(timer);
   }
 }
+
+/** A character profile's office sprites (8 frames a row), as the renderer composed them. */
+export interface ComposedCharacter {
+  /** The profile as upstream reads it: migrated to the current format, named after its file when unnamed. */
+  profile: Record<string, unknown> & { name?: string };
+  sprites: { down: string[][][]; up: string[][][]; right: string[][][] };
+}
+
+export type ComposeFailure = { kind: 'invalid_profile'; message: string } | { kind: 'unavailable'; message: string };
+
+/**
+ * Asks the renderer to compose a character profile config (upstream's
+ * Characters view "Save config" JSON, verbatim) with upstream's own wardrobe
+ * renderer — see the renderer's `POST /compose-character`.
+ */
+export async function requestCharacterComposition(
+  rendererUrl: string,
+  config: string,
+  fileName: string,
+  { fetchImpl = fetch }: { fetchImpl?: typeof fetch } = {},
+): Promise<{ ok: true; result: ComposedCharacter } | { ok: false; error: ComposeFailure }> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), RENDER_TIMEOUT_MS);
+  try {
+    const response = await fetchImpl(new URL('/compose-character', rendererUrl), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ config, fileName }),
+      signal: controller.signal,
+    });
+    if (response.status === 422 || response.status === 400) {
+      const body = (await response.json().catch(() => ({}))) as { message?: unknown };
+      const message = typeof body.message === 'string' ? body.message : 'Not a character config.';
+      return { ok: false, error: { kind: 'invalid_profile', message } };
+    }
+    if (!response.ok) {
+      const message = await response.text().catch(() => response.statusText);
+      return { ok: false, error: { kind: 'unavailable', message: message || response.statusText } };
+    }
+    return { ok: true, result: (await response.json()) as ComposedCharacter };
+  } catch (error) {
+    const message =
+      error instanceof Error && error.name === 'AbortError'
+        ? `Renderer did not respond within ${RENDER_TIMEOUT_MS}ms.`
+        : `Could not reach the renderer: ${error instanceof Error ? error.message : String(error)}`;
+    return { ok: false, error: { kind: 'unavailable', message } };
+  } finally {
+    clearTimeout(timer);
+  }
+}

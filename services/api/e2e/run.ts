@@ -370,6 +370,64 @@ async function main() {
     },
   );
 
+  // Character profiles: the one path that needs the API and the renderer
+  // together for real — the renderer composes the config with the pinned
+  // upstream's own wardrobe code, which no unit test (they stub it) can prove.
+  await step('a character profile config is composed by the real renderer and published as a character', async () => {
+    const config = { name: 'E2E Owl', body: 'flat', eyeShape: 'plain', hair: 'mop', full: 'business_suit', v: 35 };
+    const res = await api('/api/v1/assets?fileName=owl.json', {
+      method: 'POST',
+      token: owner.accessToken,
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(config),
+    });
+    assert.equal(res.status, 201);
+    const asset = await json<{ assetId: string; assetKind: string; tags: string[] }>(res);
+    assert.equal(asset.assetKind, 'character');
+    assert.deepEqual(asset.tags, ['animated', 'profile']);
+
+    const frames = await json<{ poses: { key: string; frames: string[] }[] }>(
+      await api(`/api/v1/assets/${asset.assetId}/frames`),
+    );
+    assert.ok(frames.poses.some((pose) => pose.key === 'seated-down'), 'no seated pose: the sheet was not 8 frames a row');
+
+    const back = await json<Record<string, unknown>>(await api(`/api/v1/assets/${asset.assetId}/profile.json`));
+    assert.equal(back.name, 'E2E Owl');
+    assert.equal(back.body, 'flat');
+  });
+
+  await step('a config upstream would refuse is refused with upstream’s reason', async () => {
+    const res = await api('/api/v1/assets', {
+      method: 'POST',
+      token: owner.accessToken,
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'Nobody', body: 'no-such-body' }),
+    });
+    assert.equal(res.status, 422);
+  });
+
+  await step('the built-in characters are the pinned upstream’s default profiles', async () => {
+    const list = await json<{ total: number; assets: { assetId: string }[] }>(
+      await api('/api/v1/assets?source=builtin&profile=true&limit=100'),
+    );
+    assert.equal(list.total, 6);
+    assert.deepEqual(list.assets.map((a) => a.assetId).sort(), ['CHAR_0', 'CHAR_1', 'CHAR_2', 'CHAR_3', 'CHAR_4', 'CHAR_5']);
+  });
+
+  await step('a soundtrack is published by its song code and listed for its author', async () => {
+    const res = await api('/api/v1/soundtracks', {
+      method: 'POST',
+      token: owner.accessToken,
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ code: 'town-5-8f3a21c0', title: 'E2E standup' }),
+    });
+    assert.equal(res.status, 201);
+    const created = await json<{ id: string; code: string }>(res);
+    assert.equal(created.code, 'TOWN-5-8F3A21C0');
+    const one = await json<{ title: string }>(await api(`/api/v1/soundtracks/${created.id}`));
+    assert.equal(one.title, 'E2E standup');
+  });
+
   await step('the admin directory is read-only and contains only interacted users', async () => {
     const plainAttempt = await api('/api/v1/admin/users', { token: stranger.accessToken });
     assert.equal(plainAttempt.status, 403);

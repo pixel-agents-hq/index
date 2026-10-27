@@ -16,6 +16,8 @@ import type {
   ListAssetsResponse,
   ListLayoutsParams,
   ListLayoutsResponse,
+  ListSoundtracksParams,
+  ListSoundtracksResponse,
   ListTagsResponse,
   MetaResponse,
   PublicAuthorResponse,
@@ -181,6 +183,14 @@ export function listAssets(params: ListAssetsParams = {}, signal?: AbortSignal):
 
 export function getAsset(assetId: string, signal?: AbortSignal): Promise<AssetDetail> {
   return apiRequest(`/api/v1/assets/${encodeURIComponent(assetId)}`, { signal });
+}
+
+/** Published office radio tunes, newest first. */
+export function listSoundtracks(
+  params: ListSoundtracksParams = {},
+  signal?: AbortSignal,
+): Promise<ListSoundtracksResponse> {
+  return apiRequest(`/api/v1/soundtracks${toQueryString(params)}`, { signal });
 }
 
 /** Every pose this asset can be shown in, each with its own frames embedded as PNG data URLs (AssetPreview's data source). */

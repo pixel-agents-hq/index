@@ -14,6 +14,7 @@ import type {
   ListOwnerLayoutsResponse,
   OwnerLayoutView,
   PatchLayoutBody,
+  Soundtrack,
   SubmitLayoutParams,
 } from './types';
 
@@ -71,6 +72,38 @@ export function submitAsset(zip: Blob, accessToken: string): Promise<AssetDetail
     body: zip,
     accessToken,
     headers: { 'content-type': 'application/zip' },
+  });
+}
+
+/**
+ * Publishes a character profile: the config JSON Pixel Agents' Characters
+ * view writes with "Save config", sent as the file itself. `fileName` names
+ * an unnamed profile the way upstream's "Load config" does.
+ */
+export function submitCharacterProfile(file: Blob, fileName: string, accessToken: string): Promise<AssetDetail> {
+  return apiRequest(`/api/v1/assets${toQueryString({ fileName })}`, {
+    method: 'POST',
+    body: file,
+    accessToken,
+    headers: { 'content-type': 'application/json' },
+  });
+}
+
+/** Publishes an office radio tune by its song code. */
+export function submitSoundtrack(
+  body: { code: string; title?: string },
+  accessToken: string,
+): Promise<Soundtrack> {
+  return apiRequest('/api/v1/soundtracks', { method: 'POST', body, accessToken });
+}
+
+/** Owner or moderator — same `reason` rule as `deleteAsset` below. */
+export function deleteSoundtrack(id: string, accessToken: string, reason?: string): Promise<void> {
+  return apiRequest(`/api/v1/soundtracks/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    accessToken,
+    parseAs: 'none',
+    ...(reason !== undefined ? { body: { reason } } : {}),
   });
 }
 
