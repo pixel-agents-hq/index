@@ -12,12 +12,16 @@ import { DESIGNER_CHANNEL, isDesignerEvent } from '../live-office/designerProtoc
  * the index: upstream's view runs unmodified in the `character-designer.html`
  * frame (`live-office/DesignerApp.tsx`), on a cast kept in this browser, and
  * this page publishes the character on its stage as a character profile —
- * the same upload as a config file chosen on /assets/submit.
+ * the same upload as a config file chosen on /assets/submit. Anyone can
+ * design (and remix); Publish is shown to everyone but only enabled for a
+ * signed-in community member.
  *
  * `?from=<assetId>` opens a copy of a published profile to remix.
  */
 export function CharacterDesignerPage() {
-  const { accessToken } = useAuth();
+  const { accessToken, user } = useAuth();
+  // Designing needs no account; publishing does — the button shows either way, enabled only for a member.
+  const canPublish = accessToken !== null && user?.submission.allowed === true;
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const from = searchParams.get('from');
@@ -61,7 +65,7 @@ export function CharacterDesignerPage() {
   const name = typeof profile?.name === 'string' && profile.name.trim() ? profile.name.trim() : 'Character';
 
   async function publish() {
-    if (!accessToken || !profile || customItems.length > 0) return;
+    if (!accessToken || !canPublish || !profile || customItems.length > 0) return;
     setPublishing(true);
     setError(null);
     try {
@@ -84,17 +88,19 @@ export function CharacterDesignerPage() {
             character on the stage to share it as a character profile.
           </p>
         </div>
-        <SubmissionGate what="Publishing characters" inline>
-          <button
-            type="button"
-            onClick={() => void publish()}
-            disabled={!accessToken || !profile || customItems.length > 0 || publishing}
-            className="border-2 border-accent px-4 py-2 text-sm text-accent hover:bg-accent hover:text-accent-solid-ink disabled:opacity-50"
-          >
-            {publishing ? 'Publishing…' : `Publish “${name}”`}
-          </button>
-        </SubmissionGate>
+        <button
+          type="button"
+          onClick={() => void publish()}
+          disabled={!canPublish || !profile || customItems.length > 0 || publishing}
+          title={canPublish ? undefined : 'Log in with Discord as a community member to publish'}
+          className="border-2 border-accent px-4 py-2 text-sm text-accent hover:bg-accent hover:text-accent-solid-ink disabled:opacity-50"
+        >
+          {publishing ? 'Publishing…' : `Publish “${name}”`}
+        </button>
       </div>
+
+      {/* Why Publish is disabled, and the way in (log in, or the community invite); nothing once allowed. */}
+      {!canPublish && <SubmissionGate what="Publishing characters" inline>{null}</SubmissionGate>}
 
       {customItems.length > 0 && (
         <p role="status" className="m-0 text-sm text-warning">

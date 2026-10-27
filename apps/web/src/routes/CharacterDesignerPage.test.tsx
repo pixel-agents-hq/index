@@ -138,4 +138,26 @@ describe('CharacterDesignerPage', () => {
     designerFrame().say({ channel: DESIGNER_CHANNEL, type: 'close' });
     expect(await screen.findByText('landed on the gallery')).toBeInTheDocument();
   });
+
+  it('lets an anonymous visitor design and remix, with Publish shown but disabled', async () => {
+    location.hash = '';
+    stubApi();
+    renderPage('/assets/design?from=NIGHT_OWL');
+    const { postMessage, say } = designerFrame();
+    say({ channel: DESIGNER_CHANNEL, type: 'ready' });
+    // Remixing a published profile needs no account.
+    await waitFor(() =>
+      expect(postMessage).toHaveBeenCalledWith(
+        { channel: DESIGNER_CHANNEL, type: 'open', profile: REMIX },
+        window.location.origin,
+      ),
+    );
+    say({ channel: DESIGNER_CHANNEL, type: 'selection', profile: REMIX, customItems: [] });
+
+    expect(screen.getByRole('button', { name: 'Publish “Night Owl”' })).toBeDisabled();
+    expect(
+      await screen.findByText(/Publishing characters is available to members of the official Discord community\./),
+    ).toBeInTheDocument();
+    expect(uploads).toHaveLength(0);
+  });
 });
