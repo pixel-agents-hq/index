@@ -549,7 +549,27 @@ git merge-base --is-ancestor origin/main origin/develop && \
 
 Every promotion after that is the workflow.
 
-**4. Vercel** (Project → Settings; Root Directory must be `apps/web`)
+**4. GitHub — Enforce HTTPS for Pages** (Settings → Pages → **Enforce HTTPS**). Like the
+ruleset, this needs *admin*: the Pages update endpoint answers a push-only account such as
+`nntin-bot` with `404 Not Found`, not a 403.
+
+It is off by default for a site that was set up without it, and while it is off GitHub
+serves the site over plain `http://` too, and even reports that as the canonical
+`html_url`. A visitor who arrives that way (an old bookmark, a referrer) runs the page
+under the `http://<user>.github.io` origin, and the API rightly refuses it, because
+credentialed CORS over unencrypted HTTP is exactly what the allowlist exists to prevent.
+The browser shows a CORS error on every request. **Do not "fix" that by adding the
+`http://` origin to `PUBLIC_WEB_ORIGIN`.** That is a security downgrade, not a fix. With
+enforcement on, GitHub 301-redirects the `http://` load to `https://` before any of the
+page's JavaScript runs, so the API never sees the `http://` origin at all.
+
+```bash
+gh api repos/pixel-agents-hq/index/pages --jq '{https_enforced, html_url}'   # before
+gh api -X PUT repos/pixel-agents-hq/index/pages -F https_enforced=true       # as an admin
+curl -sI http://<user>.github.io/pixel-index/ | grep -iE '^(HTTP|location)'  # 301 → https://
+```
+
+**5. Vercel** (Project → Settings; Root Directory must be `apps/web`)
 
 Set the **Production Branch** (Settings → Git) to `develop`. Vercel hosts staging, not
 production — `main` is GitHub Pages plus the self-hosted stack, and should not be a Vercel
@@ -575,7 +595,7 @@ if they should stay team-only. Either way, verify with:
 curl -s -o /dev/null -w '%{http_code}\n' https://<preview-url>/   # 200 public, 302 protected
 ```
 
-**5. The backend host** — `cp .env.example .env`, then fill in. Twice, once per
+**6. The backend host** — `cp .env.example .env`, then fill in. Twice, once per
 environment: production and staging are two deployments of this same stack, each with its
 own hostnames, its own database and its own `.env`.
 
@@ -601,13 +621,13 @@ PUBLIC_WEB_ORIGIN_PATTERNS=https://my-project-*-my-team.vercel.app
 
 then `docker compose up --build -d`.
 
-**6. Discord Developer Portal** — under OAuth2 → Redirects, add
+**7. Discord Developer Portal** — under OAuth2 → Redirects, add
 `${PUBLIC_API_ORIGIN}/callback` exactly (e.g. `https://api.example.com/callback`). One
 entry per environment: a single app takes several redirect URIs, so staging needs its own
 line there rather than its own application, unless you would rather keep the two entirely
 separate.
 
-**7. Verify.** `curl https://api.example.com/health`; open the Pages and Vercel sites and
+**8. Verify.** `curl https://api.example.com/health`; open the Pages and Vercel sites and
 confirm layouts load; click through a Discord login.
 
 The single most useful check, because it distinguishes "misconfigured" from "built before
@@ -632,6 +652,9 @@ Note that a GitHub Pages site (`https://<user>.github.io`) and a custom-domain s
 **different origins**, and both must be listed in `PUBLIC_WEB_ORIGIN` if you want both to
 work. The origin is the host only — `https://<user>.github.io`, never
 `https://<user>.github.io/pixel-index`.
+
+A CORS error whose `Origin` is `http://…` rather than `https://…` is a different problem:
+see step 4, and leave the allowlist alone.
 
 **Allowlist the origin the browser actually ends up on.** If a custom domain is
 configured, GitHub 301-redirects `github.io` URLs to it, so the page runs — and sends its
