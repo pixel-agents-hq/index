@@ -213,6 +213,7 @@ export default defineConfig(({ mode }) => {
         input: {
           index: path.resolve(HERE, 'index.html'),
           liveOffice: path.resolve(HERE, 'live-office.html'),
+          radio: path.resolve(HERE, 'radio.html'),
         },
       },
     },

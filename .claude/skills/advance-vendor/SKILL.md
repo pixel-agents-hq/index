@@ -54,7 +54,9 @@ Check for an open automated PR (`chore/vendor-pixel-agents`, opened by
 Check whether the asset / sprite format moved:
 `git -C vendor/pixel-agents diff --stat <pin> origin/main -- webview-ui/public/assets core/src/assets`.
 If it did, update the hand-kept mirrors that say so
-(e.g. `services/api/src/assets/decodeCharacter.ts`'s frame-grid constants).
+(e.g. `services/api/src/assets/decodeCharacter.ts`'s frame-grid constants,
+`services/api/src/soundtracks/songCode.ts`'s copy of the radio's song-code format;
+`songCode.test.ts` compares it with upstream's own parser).
 
 ### 2. Run the real harness (don't build a new one)
 
@@ -103,7 +105,10 @@ that specifier, and grep the built `dist/assets/*.js` for `new WebSocket`.
 `npm run typecheck`, `npm run lint` (root; type-aware, includes
 `no-deprecated`), `npm test --workspace @pixel-index/web`,
 `services/renderer` `npm test` + `npm run test:integration`,
-`npm run vendor:commit:check`, `npm run furniture-categories:schema:check`, then
+`npm run vendor:commit:check`, `npm run furniture-categories:schema:check`,
+`npm run builtin-profiles:check` (if it fails, the default cast or its wardrobe art
+moved: run `npm run builtin-profiles` and commit the regenerated
+`services/api/src/assets/builtinProfiles.json`), then
 the step-2 harness again at the final pin. Commit the gitlink and
 `vendor/pixel-agents.commit` together (CI's drift check fails otherwise).
 

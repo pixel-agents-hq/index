@@ -42,6 +42,13 @@ jobs:
       - name: The furniture category enum matches the pinned vendor manifests
         run: npm run furniture-categories:schema:check
 
+      # The built-in character profiles services/api publishes are the pinned
+      # vendor's default cast, composed by its own wardrobe renderer at
+      # generation time (apps/web/build/generateBuiltinProfiles.ts) — this is
+      # what stops them from silently drifting after a vendor bump.
+      - name: The built-in character profiles match the pinned vendor's default cast
+        run: npm run builtin-profiles:check
+
       # Builds @pixel-index/layout-core, then runs its CLI over seed/.
       - name: Validate the seed layouts against the pinned Pixel Agents
         run: npm run validate

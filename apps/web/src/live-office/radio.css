@@ -1,0 +1,63 @@
+/*
+ * The player bar inside radio.html — its own document, so plain CSS, in the
+ * site's palette (src/index.css). radioMain.tsx mirrors the page's
+ * data-theme onto this document.
+ */
+:root {
+  color-scheme: light;
+  --radio-bg: #ffffff;
+  --radio-ink: #1c1830;
+  --radio-muted: #4a4570;
+  --radio-border: #c3b8ea;
+  --radio-accent: #6030ff;
+}
+html[data-theme='dark'] {
+  color-scheme: dark;
+  --radio-bg: #1e1e2e;
+  --radio-ink: #eeeef4;
+  --radio-muted: #a8a8c4;
+  --radio-border: #505074;
+  --radio-accent: #9a8fff;
+}
+html,
+body {
+  margin: 0;
+  background: var(--radio-bg);
+  color: var(--radio-ink);
+  font: 13px/1.35 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.radio {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+}
+.radio-toggle {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border: 2px solid var(--radio-accent);
+  background: transparent;
+  color: var(--radio-accent);
+  font: inherit;
+  cursor: pointer;
+}
+.radio-toggle:disabled {
+  border-color: var(--radio-border);
+  color: var(--radio-muted);
+  cursor: default;
+}
+.radio-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.radio-name {
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.radio-meta {
+  color: var(--radio-muted);
+}

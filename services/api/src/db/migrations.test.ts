@@ -24,6 +24,7 @@ describe('migrations', () => {
       'layouts',
       'moderation_actions',
       'reports',
+      'soundtracks',
       'tags',
       'users',
     ]);

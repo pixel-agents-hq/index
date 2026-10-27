@@ -57,6 +57,22 @@ describe('AuthorPage', () => {
         expect(url).toContain('author=author-1');
         return Response.json({ schemaVersion: 1, total: 0, assets: [], nextCursor: null });
       }
+      if (url.includes('/api/v1/soundtracks?')) {
+        expect(url).toContain('author=author-1');
+        return Response.json({
+          schemaVersion: 1,
+          total: 1,
+          nextCursor: null,
+          soundtracks: [{
+            id: '00000000-0000-4000-8000-000000000001',
+            code: 'TOWN-5-8F3A21C0',
+            mood: 'town',
+            title: 'Morning standup',
+            author: { discordId: 'author-1', username: 'discord-handle', displayName: 'Guild Nick', avatarUrl: null },
+            createdAt: '2026-08-09T00:00:00.000Z',
+          }],
+        });
+      }
       return new Response('not found', { status: 404 });
     }));
 
@@ -69,5 +85,12 @@ describe('AuthorPage', () => {
     expect(screen.getByText('@discord-handle')).toBeInTheDocument();
     expect(screen.getByText('1 public layout')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Public Office' })).toBeInTheDocument();
+    // Their soundtracks: the code to copy, and a way to hear them all.
+    expect(screen.getByRole('heading', { name: 'Soundtracks' })).toBeInTheDocument();
+    expect(screen.getByText('TOWN-5-8F3A21C0')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Listen to it on the soundtracks page' })).toHaveAttribute(
+      'href',
+      '/soundtracks?author=author-1&authorLabel=Guild+Nick',
+    );
   });
 });

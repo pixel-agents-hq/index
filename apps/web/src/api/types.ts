@@ -335,5 +335,33 @@ export interface ListAssetsParams {
   orientation?: string[];
   animation?: string[];
   interactable?: boolean;
+  /** Characters published as a Pixel Agents character profile (true) or as a sprite sheet (false). */
+  profile?: boolean;
+}
+
+/** One published office radio tune — services/api's `soundtracks/routes.ts` `PublicSoundtrack`. */
+export interface Soundtrack {
+  id: string;
+  /** Canonical song code (`TOWN-5-8F3A21C0`): paste it into the office radio's settings to play the tune. */
+  code: string;
+  mood: string;
+  title: string | null;
+  author: PublicAuthor;
+  createdAt: string;
+}
+
+export interface ListSoundtracksParams {
+  limit?: number;
+  cursor?: string;
+  /** A Discord user id (snowflake), same convention as ListAssetsParams.author. */
+  author?: string;
+  mood?: string;
+}
+
+export interface ListSoundtracksResponse {
+  schemaVersion: number;
+  total: number;
+  soundtracks: Soundtrack[];
+  nextCursor: string | null;
 }
 
