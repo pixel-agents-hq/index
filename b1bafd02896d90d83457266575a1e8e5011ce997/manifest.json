@@ -1,0 +1,27 @@
+{
+  "generatedAt": "2026-10-27T11:54:02.194Z",
+  "candidate": {
+    "commit": "b1bafd02896d90d83457266575a1e8e5011ce997",
+    "version": "1.5.0"
+  },
+  "baseline": {
+    "commit": "3537e140c2094761beae748592aeb92ece8edfdd",
+    "version": "1.4.1"
+  },
+  "upstreamUrl": "https://github.com/pixel-agents-hq/pixel-agents",
+  "changed": 3,
+  "failed": 0,
+  "shown": 3,
+  "cap": 50,
+  "layouts": {
+    "severance-office": {
+      "file": "severance-office.png"
+    },
+    "four-rooms": {
+      "file": "four-rooms.png"
+    },
+    "default": {
+      "file": "default.png"
+    }
+  }
+}
