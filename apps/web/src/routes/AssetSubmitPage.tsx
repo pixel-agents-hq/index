@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 import { ApiError } from '../api/client';
 import { submitAsset, submitCharacterProfile } from '../api/manageClient';
@@ -58,7 +58,8 @@ export function AssetSubmitPage() {
           Or a <strong>character profile</strong>: the <code>.json</code> Pixel Agents'
           Characters view writes with <em>Save config</em>, one character per file. It
           is drawn here exactly as Pixel Agents draws it, and others can load it back
-          with <em>Load config</em>.
+          with <em>Load config</em>. No Pixel Agents at hand? <Link to="/assets/design" className="text-accent hover:underline">Design one here</Link>,
+          in the same Characters view.
         </p>
 
         <div className="mt-6 flex flex-col gap-4">

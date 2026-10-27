@@ -89,9 +89,14 @@ export function AssetsGallery() {
     <div>
       <div className="mb-4 flex items-center justify-between">
         <h1 className="font-display text-2xl text-ink">Assets</h1>
-        <Link to="/assets/submit" className="border-2 border-accent px-3 py-1.5 text-sm text-accent">
-          Upload an asset
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link to="/assets/design" className="border-2 border-border px-3 py-1.5 text-sm text-ink hover:border-accent">
+            Design a character
+          </Link>
+          <Link to="/assets/submit" className="border-2 border-accent px-3 py-1.5 text-sm text-accent">
+            Upload an asset
+          </Link>
+        </div>
       </div>
       <AssetFilterBar filters={filters} onChange={(next) => setSearchParams(assetFiltersToSearchParams(next))} />
       {selected.size > 0 && (

@@ -1,0 +1,13 @@
+@import '../../../../vendor/pixel-agents/webview-ui/src/index.css';
+
+/* Same as viewer.css: Tailwind's scan stops at the submodule boundary, so
+   upstream's JSX (here the Characters view) is named explicitly. */
+@source '../../../../vendor/pixel-agents/webview-ui/src';
+
+html,
+body,
+#root {
+  background: #181828;
+  height: 100%;
+  margin: 0;
+}

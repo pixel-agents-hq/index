@@ -144,6 +144,14 @@ export function AssetDetailPage() {
             Download config
           </a>
         )}
+        {asset.tags.includes('profile') && (
+          <Link
+            to={`/assets/design?from=${asset.assetId}`}
+            className="border-2 border-border px-3 py-1.5 text-sm text-ink hover:border-accent"
+          >
+            Remix in the designer
+          </Link>
+        )}
         {canDelete && (
           <button
             type="button"
@@ -159,7 +167,8 @@ export function AssetDetailPage() {
       {asset.tags.includes('profile') && (
         <p className="mt-2 text-sm text-muted">
           A Pixel Agents character profile: in Pixel Agents, open <em>Characters</em> and
-          use <em>Load config</em> with the downloaded <code>.json</code> to add it to your cast.
+          use <em>Load config</em> with the downloaded <code>.json</code> to add it to your cast —
+          or remix a copy right here in the designer.
         </p>
       )}
 

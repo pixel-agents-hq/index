@@ -423,6 +423,29 @@ layout renders and the export zip.
   (`apps/web/build/generateBuiltinProfiles.ts`); CI's `builtin-profiles:check` fails a
   vendor bump that changes the default cast or its art until it is regenerated.
 
+### The character designer: Pixel Agents' own Characters view, in the index
+
+`/assets/design` lets a user design a character without leaving the index (or having
+Pixel Agents installed). Upstream's Characters view runs **unmodified** in the
+`character-designer.html` frame (`apps/web/src/live-office/DesignerApp.tsx`), the same
+way the layout editor runs upstream's editor in `live-office.html`:
+
+- The view edits upstream's `castStore`, which saves the whole cast over the transport
+  and waits for the server's answer. The index's transport stub
+  (`live-office/transport.ts`, inert for every other frame) hands that one message to
+  the designer, which plays the server: the cast is kept in this browser's
+  `localStorage` and the save is answered at once, so Save, undo and the dirty-close
+  prompt all behave as in Pixel Agents. A fresh browser starts from upstream's six
+  default characters.
+- The page around the frame (`routes/CharacterDesignerPage.tsx`,
+  `live-office/designerProtocol.ts`) shows **Publish "‹name›"** for the character on the
+  stage (unsaved edits included) and uploads it exactly like a config file chosen on
+  `/assets/submit`. `?from=<assetId>` (a profile's **Remix in the designer** button)
+  opens a copy of a published profile under a fresh id.
+- A character wearing a **custom item** (a part saved from the pixel editor) can't be
+  published as it looks: a character config doesn't carry custom items — upstream's own
+  *Save config* doesn't either — so the page says so and disables Publish.
+
 ### Soundtracks: their own table
 
 A song code is the whole tune: there is no audio, no sprite and no file to import, only

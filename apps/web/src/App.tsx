@@ -8,6 +8,7 @@ import { AssetsGallery } from './routes/AssetsGallery';
 import { AssetSubmitPage } from './routes/AssetSubmitPage';
 import { AuditLogPage } from './routes/AuditLogPage';
 import { AuthorPage } from './routes/AuthorPage';
+import { CharacterDesignerPage } from './routes/CharacterDesignerPage';
 import { DeveloperPage } from './routes/DeveloperPage';
 import { Home } from './routes/Home';
 import { LayoutDetailPage } from './routes/LayoutDetailPage';
@@ -45,6 +46,7 @@ export function App() {
         {/* #101: custom-asset browsing/detail/upload, mirroring the layout routes above. */}
         <Route path="assets" element={<AssetsGallery />} />
         <Route path="assets/submit" element={<AssetSubmitPage />} />
+        <Route path="assets/design" element={<CharacterDesignerPage />} />
         <Route path="assets/:id" element={<AssetDetailPage />} />
         <Route path="soundtracks" element={<SoundtracksPage />} />
         {/*
