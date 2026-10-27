@@ -119,6 +119,20 @@ describe('Layout header nav', () => {
   });
 });
 
+describe('Layout upstream pin', () => {
+  it('names the pinned Pixel Agents version and links the upstream tree at that exact commit', async () => {
+    // vitest.config.ts defines the build-time pin as 9.9.9 at 000…0 on git.example.test/pixel-agents.
+    stubFetch(null);
+    renderLayout();
+    const pin = await screen.findByRole('link', { name: 'Pixel Agents v9.9.9' });
+    expect(pin).toHaveAttribute(
+      'href',
+      `https://git.example.test/pixel-agents/tree/${'0'.repeat(40)}`,
+    );
+    expect(pin).toHaveAttribute('title', `Pinned to ${'0'.repeat(40)}`);
+  });
+});
+
 describe('Layout account menu', () => {
   it('links to the caller\'s own public profile by Discord id, not internal id', async () => {
     stubLoggedIn();
