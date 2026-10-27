@@ -122,6 +122,8 @@ describe('syncBuiltinAssets', () => {
       expect(frames?.down).toHaveLength(8);
     }
     expect(rows[0]?.name).toBe('Suit');
+    // Read back out of jsonb (keys reordered), they still count as the same profiles: no resync loop.
+    expect(await syncBuiltinAssets(db(), upstreamDir)).toEqual({ synced: false, count: 0, commit: COMMIT_A });
   });
 
   it('populates furniture, character, and pet rows on a fresh install', async () => {
@@ -169,6 +171,19 @@ describe('syncBuiltinAssets', () => {
 
     const after = await builtinRows();
     expect(after).toEqual(before);
+  });
+
+  it('resyncs at an unchanged pin when the built-in profiles changed (a database synced before they existed)', async () => {
+    const upstreamDir = vendor({ commit: COMMIT_A, furniture: [{ id: 'CHAIR' }] });
+    await syncBuiltinAssets(db(), upstreamDir, []);
+
+    const result = await syncBuiltinAssets(db(), upstreamDir, [fixtureProfile('char-0', 'Suit')]);
+    expect(result).toEqual({ synced: true, count: 2, commit: COMMIT_A });
+    expect((await builtinRows()).map((r) => r.assetId)).toEqual(['CHAIR', 'CHAR_0']);
+
+    // And then it is settled again.
+    const again = await syncBuiltinAssets(db(), upstreamDir, [fixtureProfile('char-0', 'Suit')]);
+    expect(again).toEqual({ synced: false, count: 0, commit: COMMIT_A });
   });
 
   it('a changed pin resyncs, dropping stale builtin rows and leaving custom rows untouched', async () => {

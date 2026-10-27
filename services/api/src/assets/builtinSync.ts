@@ -26,7 +26,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import { upstreamAssetsDir, upstreamPin } from '@pixel-index/layout-core';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import JSZip from 'jszip';
 
 import type { AnyDatabase } from '../db/client.js';
@@ -36,7 +36,7 @@ import builtinProfiles from './builtinProfiles.json' with { type: 'json' };
 import { type DecodedFurnitureAsset, decodeFurnitureZip } from './decode.js';
 import { decodeCharacterZip,type DecodedCharacterAsset } from './decodeCharacter.js';
 import { type DecodedPetAsset, decodePetZip } from './decodePet.js';
-import type { DecodedProfileAsset } from './decodeProfile.js';
+import { type DecodedProfileAsset, profileOf } from './decodeProfile.js';
 import { PROFILE_TAG } from './tags.js';
 import type { IdCollisionChecker } from './zip.js';
 
@@ -183,6 +183,33 @@ function toRow(decoded: DecodedAsset, zipBuffer: Buffer, commit: string): schema
   };
 }
 
+/**
+ * Whether the built-in profiles already stored are exactly `profiles`. The
+ * pinned commit alone can't say: the profiles come from this repo's
+ * `builtinProfiles.json`, not from the vendor tree, so the pin can stay put
+ * while they change — the first deploy carrying them landed on a database
+ * already synced at the same pin, without profiles, and the commit check
+ * alone kept it that way.
+ */
+/** JSON with object keys sorted — `jsonb` doesn't keep the order a profile was written in. */
+function canonicalJson(value: unknown): string {
+  return JSON.stringify(value, (_key, v: unknown) =>
+    v && typeof v === 'object' && !Array.isArray(v)
+      ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+      : v,
+  );
+}
+
+async function storedProfilesMatch(db: AnyDatabase, profiles: readonly BuiltinProfile[]): Promise<boolean> {
+  const rows = await db
+    .select({ manifest: schema.customAssets.manifest })
+    .from(schema.customAssets)
+    .where(and(eq(schema.customAssets.source, 'builtin'), eq(schema.customAssets.assetKind, 'character')));
+  const stored = rows.map((row) => canonicalJson(profileOf(row.manifest))).sort();
+  const expected = profiles.map((p) => canonicalJson(p.profile)).sort();
+  return stored.length === expected.length && stored.every((profile, i) => profile === expected[i]);
+}
+
 export async function syncBuiltinAssets(
   db: AnyDatabase,
   upstreamDir?: string,
@@ -201,7 +228,11 @@ export async function syncBuiltinAssets(
     .selectDistinct({ sourceCommit: schema.customAssets.sourceCommit })
     .from(schema.customAssets)
     .where(eq(schema.customAssets.source, 'builtin'));
-  if (stored.length === 1 && stored[0]?.sourceCommit === pin.commit) {
+  if (
+    stored.length === 1 &&
+    stored[0]?.sourceCommit === pin.commit &&
+    (await storedProfilesMatch(db, profiles))
+  ) {
     return { synced: false, count: 0, commit: pin.commit };
   }
 
