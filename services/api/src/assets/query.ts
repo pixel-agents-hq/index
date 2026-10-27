@@ -5,7 +5,7 @@ import { and, arrayContains, arrayOverlaps, desc, eq, inArray, isNull, not, sql 
 import type { AnyDatabase } from '../db/client.js';
 import * as schema from '../db/schema.js';
 import { type Cursor, decodeCursor, encodeCursor, timestampMicros } from '../layouts/cursor.js';
-import { INTERACTABLE_TAG } from './tags.js';
+import { INTERACTABLE_TAG, PROFILE_TAG } from './tags.js';
 
 export interface ListCustomAssetsFilters {
   assetKind?: schema.CustomAsset['assetKind'];
@@ -23,6 +23,8 @@ export interface ListCustomAssetsFilters {
   animation?: string[];
   /** Has (true) or lacks (false) the `interactable` tag. */
   interactable?: boolean;
+  /** Has (true) or lacks (false) the `profile` tag. */
+  profile?: boolean;
 }
 
 export interface ListCustomAssetsOptions {
@@ -75,6 +77,10 @@ function buildConditions(filters: ListCustomAssetsFilters) {
   if (filters.interactable !== undefined) {
     const hasTag = arrayContains(schema.customAssets.tags, [INTERACTABLE_TAG]);
     conditions.push(filters.interactable ? hasTag : not(hasTag));
+  }
+  if (filters.profile !== undefined) {
+    const hasTag = arrayContains(schema.customAssets.tags, [PROFILE_TAG]);
+    conditions.push(filters.profile ? hasTag : not(hasTag));
   }
   return conditions;
 }

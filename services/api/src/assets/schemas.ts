@@ -83,6 +83,8 @@ export const listCustomAssetsQuerySchema = {
       description: 'Comma-separated of "static" and/or "animated"; matches ANY of them.',
     },
     interactable: { type: 'string', enum: ['true', 'false'] },
+    // Characters published as a Pixel Agents character profile (true) or as a sprite sheet (false).
+    profile: { type: 'string', enum: ['true', 'false'] },
   },
 } as const;
 
@@ -224,5 +226,8 @@ export const submitCustomAssetQuerySchema = {
     // see submit.ts. A web upload attributes to the caller's own session and
     // must not supply this.
     discordUserId: { type: 'string', pattern: '^\\d{17,20}$' },
+    // A character profile upload's original file name: an unnamed profile
+    // is named after it, the way upstream's "Load config" names one.
+    fileName: { type: 'string', maxLength: 200 },
   },
 } as const;

@@ -35,15 +35,17 @@ import { ApiError } from '../errors.js';
 import { isUniqueViolation } from '../layouts/metadata.js';
 import { recordModerationAction } from '../moderation/audit.js';
 import { writeRateLimitConfig } from '../rateLimit.js';
+import { requestCharacterComposition } from '../renderer/client.js';
 import { type DecodedFurnitureAsset, decodeFurnitureZip } from './decode.js';
 import { decodeCharacterZip,type DecodedCharacterAsset } from './decodeCharacter.js';
 import { type DecodedPetAsset, decodePetZip } from './decodePet.js';
+import { decodeCharacterProfile, type DecodedProfileAsset, looksLikeProfile } from './decodeProfile.js';
 import { existingCustomAssetIds } from './query.js';
 import { submitCustomAssetQuerySchema } from './schemas.js';
 import { toDetail } from './serialize.js';
 import type { IdCollisionChecker } from './zip.js';
 
-type DecodedAsset = DecodedFurnitureAsset | DecodedCharacterAsset | DecodedPetAsset;
+type DecodedAsset = DecodedFurnitureAsset | DecodedCharacterAsset | DecodedPetAsset | DecodedProfileAsset;
 
 /**
  * All three kinds are now fully self-describing zips (#105 follow-up:
@@ -124,6 +126,11 @@ export function registerAssetSubmitRoutes(app: FastifyInstance, { config, db }: 
     instance.addContentTypeParser('application/zip', { parseAs: 'buffer' }, (_request, body, done) => {
       done(null, body);
     });
+    // A character profile (decodeProfile.ts) is uploaded as the config file
+    // itself; it is decoded from its bytes too, never parsed here.
+    instance.addContentTypeParser('application/json', { parseAs: 'buffer' }, (_request, body, done) => {
+      done(null, body);
+    });
 
     instance.post<{ Body: Buffer; Querystring: FromSchema<typeof submitCustomAssetQuerySchema> }>(
       '/api/v1/assets',
@@ -144,7 +151,11 @@ export function registerAssetSubmitRoutes(app: FastifyInstance, { config, db }: 
         const existing = await existingCustomAssetIds(db);
         const isIdTaken = (id: string) => builtIn.has(id) || existing.has(id);
 
-        const decoded = await decodeAsset(zipBuffer, isIdTaken);
+        const decoded = looksLikeProfile(zipBuffer)
+          ? await decodeCharacterProfile(zipBuffer, request.query.fileName ?? 'character.json', isIdTaken, (text, name) =>
+              requestCharacterComposition(config.rendererUrl, text, name),
+            )
+          : await decodeAsset(zipBuffer, isIdTaken);
 
         let created: schema.CustomAsset;
         try {
