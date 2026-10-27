@@ -22,7 +22,7 @@ function describe(code: string): TuneDescription | null {
   const parsed = parseSongCode(code);
   if (!parsed) return null;
   const song = makeSong(parsed.seed, parsed.moodKey, null, parsed.root);
-  return { name: song.name, key: keyLabel(song) };
+  return { code: songCode(song), name: song.name, key: keyLabel(song) };
 }
 
 /**
@@ -44,11 +44,13 @@ export function RadioApp() {
       const command = event.data;
       if (command.type === 'describe') {
         const tunes: Record<string, TuneDescription> = {};
+        const invalid: string[] = [];
         for (const c of command.codes) {
           const tune = describe(c);
           if (tune) tunes[c] = tune;
+          else invalid.push(c);
         }
-        post({ channel: RADIO_CHANNEL, type: 'described', tunes });
+        post({ channel: RADIO_CHANNEL, type: 'described', tunes, invalid });
       } else if (command.type === 'play') {
         if (!officeRadio.playCode(command.code)) return;
         setCued(true);

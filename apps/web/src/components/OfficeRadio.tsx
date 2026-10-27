@@ -19,6 +19,8 @@ export interface OfficeRadio {
   state: OfficeRadioState;
   /** Each asked-about code's tune name and key, as Pixel Agents' composer writes them. */
   tunes: Record<string, TuneDescription>;
+  /** Asked-about codes Pixel Agents' radio can't play. */
+  invalid: ReadonlySet<string>;
   play: (code: string) => void;
   pause: () => void;
   /** The player bar: render it once, where it should show. */
@@ -35,6 +37,7 @@ export function useOfficeRadio(codes: readonly string[]): OfficeRadio {
   const [ready, setReady] = useState(false);
   const [state, setState] = useState<OfficeRadioState>({ code: null, playing: false, blocked: false });
   const [tunes, setTunes] = useState<Record<string, TuneDescription>>({});
+  const [invalid, setInvalid] = useState<ReadonlySet<string>>(new Set());
 
   const send = useCallback((command: RadioCommand) => {
     frameRef.current?.contentWindow?.postMessage(command, window.location.origin);
@@ -46,16 +49,25 @@ export function useOfficeRadio(codes: readonly string[]): OfficeRadio {
       if (!isRadioEvent(event.data)) return;
       const message = event.data;
       if (message.type === 'ready') setReady(true);
-      else if (message.type === 'described') setTunes((known) => ({ ...known, ...message.tunes }));
+      else if (message.type === 'described') {
+        setTunes((known) => ({ ...known, ...message.tunes }));
+        setInvalid((known) => new Set([...known, ...message.invalid]));
+      }
       else setState({ code: message.code, playing: message.playing, blocked: message.blocked });
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
   }, []);
 
-  const key = codes.join(',');
+  // Each code asked about once: a list that grows (a typed code, a loaded page) asks only for the new ones.
+  const asked = useRef(new Set<string>());
+  const key = codes.join('\n');
   useEffect(() => {
-    if (ready && key) send({ channel: RADIO_CHANNEL, type: 'describe', codes: key.split(',') });
+    if (!ready) return;
+    const fresh = key.split('\n').filter((code) => code && !asked.current.has(code));
+    if (fresh.length === 0) return;
+    for (const code of fresh) asked.current.add(code);
+    send({ channel: RADIO_CHANNEL, type: 'describe', codes: fresh });
   }, [ready, key, send]);
 
   const frame = (
@@ -71,6 +83,7 @@ export function useOfficeRadio(codes: readonly string[]): OfficeRadio {
   return {
     state,
     tunes,
+    invalid,
     play: (code) => send({ channel: RADIO_CHANNEL, type: 'play', code }),
     pause: () => send({ channel: RADIO_CHANNEL, type: 'pause' }),
     frame,

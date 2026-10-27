@@ -7,7 +7,7 @@ import type { Soundtrack } from '../api/types';
 import { useAuth } from '../auth/authState';
 import { AuthorLink } from '../components/AuthorLink';
 import { ErrorNotice } from '../components/ErrorNotice';
-import { useOfficeRadio } from '../components/OfficeRadio';
+import { type OfficeRadio, useOfficeRadio } from '../components/OfficeRadio';
 import { SubmissionGate } from '../components/SubmissionGate';
 
 const PAGE_SIZE = 24;
@@ -80,7 +80,15 @@ export function SoundtracksPage() {
       });
   }
 
-  const radio = useOfficeRadio((soundtracks ?? []).map((s) => s.code));
+  // The code being tried in the publish form, handed to the radio once typing pauses.
+  const [draftCode, setDraftCode] = useState('');
+  const [checkedCode, setCheckedCode] = useState('');
+  useEffect(() => {
+    const timer = setTimeout(() => setCheckedCode(draftCode.trim()), CHECK_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [draftCode]);
+
+  const radio = useOfficeRadio([...(soundtracks ?? []).map((s) => s.code), checkedCode]);
 
   function setMood(value: string) {
     const next = new URLSearchParams(searchParams);
@@ -105,7 +113,13 @@ export function SoundtracksPage() {
         office, or press Play to hear it here.
       </p>
 
-      <PublishSoundtrack onPublished={(created) => setSoundtracks((existing) => [created, ...(existing ?? [])])} />
+      <PublishSoundtrack
+        radio={radio}
+        code={draftCode}
+        onCodeChange={setDraftCode}
+        checked={checkedCode}
+        onPublished={(created) => setSoundtracks((existing) => [created, ...(existing ?? [])])}
+      />
 
       <div className="mb-6 mt-6 flex flex-wrap items-center gap-3 border-2 border-border bg-surface p-4">
         <label className="flex items-center gap-1.5 text-sm text-muted">
@@ -163,21 +177,49 @@ export function SoundtracksPage() {
   );
 }
 
-function PublishSoundtrack({ onPublished }: { onPublished: (soundtrack: Soundtrack) => void }) {
+/** How long typing pauses before the radio is asked about the code. */
+const CHECK_DELAY_MS = 250;
+
+/**
+ * Try a song code, then publish it. Everything about the code — whether the
+ * radio can play it, its tune's name and key, the tune itself — comes from
+ * Pixel Agents' own radio in the page's player (`useOfficeRadio`), so a code
+ * sounds here exactly as it will in Pixel Agents. Trying needs no account;
+ * publishing does.
+ */
+function PublishSoundtrack({
+  radio,
+  code,
+  onCodeChange,
+  checked,
+  onPublished,
+}: {
+  radio: OfficeRadio;
+  code: string;
+  onCodeChange: (code: string) => void;
+  /** The code as last handed to the radio for checking (debounced). */
+  checked: string;
+  onPublished: (soundtrack: Soundtrack) => void;
+}) {
   const { accessToken } = useAuth();
-  const [code, setCode] = useState('');
   const [title, setTitle] = useState('');
   const [publishing, setPublishing] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
 
+  const typed = code.trim();
+  const settled = typed !== '' && typed === checked;
+  const tune = settled ? radio.tunes[typed] : undefined;
+  const unplayable = settled && radio.invalid.has(typed);
+  const trying = tune !== undefined && radio.state.playing && radio.state.code === tune.code;
+
   async function publish() {
-    if (!accessToken || !code.trim()) return;
+    if (!accessToken || !typed) return;
     setPublishing(true);
     setError(null);
     try {
-      const created = await submitSoundtrack({ code: code.trim(), ...(title.trim() ? { title: title.trim() } : {}) }, accessToken);
+      const created = await submitSoundtrack({ code: typed, ...(title.trim() ? { title: title.trim() } : {}) }, accessToken);
       onPublished(created);
-      setCode('');
+      onCodeChange('');
       setTitle('');
     } catch (caught) {
       setError(caught instanceof ApiError ? caught : new ApiError(0, 'Something unexpected went wrong.'));
@@ -188,52 +230,73 @@ function PublishSoundtrack({ onPublished }: { onPublished: (soundtrack: Soundtra
 
   return (
     <section className="mt-6 max-w-2xl border-2 border-border bg-surface p-4">
-      <h2 className="m-0 font-display text-lg text-ink">Publish a soundtrack</h2>
-      <SubmissionGate what="Publishing soundtracks" inline>
-        <p className="mt-1 text-sm text-muted">
-          In Pixel Agents, open the radio's settings and copy the song code of a tune you
-          like.
-        </p>
-        <form
-          className="mt-3 flex flex-wrap items-end gap-3"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void publish();
-          }}
-        >
+      <h2 className="m-0 font-display text-lg text-ink">Try or publish a soundtrack</h2>
+      <p className="mt-1 text-sm text-muted">
+        In Pixel Agents, open the radio's settings and copy the song code of a tune you
+        like — or type one and try it here first.
+      </p>
+      <form
+        className="mt-3 flex flex-col gap-3"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void publish();
+        }}
+      >
+        <div className="flex flex-wrap items-end gap-3">
           <label className="flex flex-col gap-1 text-sm text-muted">
             Song code
             <input
               value={code}
-              onChange={(event) => setCode(event.target.value)}
+              onChange={(event) => onCodeChange(event.target.value)}
               placeholder="TOWN-5-8F3A21C0"
+              aria-describedby="soundtrack-tune"
               className="border-2 border-border bg-canvas px-2 py-1 font-mono text-sm text-ink"
               required
             />
           </label>
-          <label className="flex flex-col gap-1 text-sm text-muted">
-            Title (optional)
-            <input
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              maxLength={80}
-              className="border-2 border-border bg-canvas px-2 py-1 text-sm text-ink"
-            />
-          </label>
           <button
-            type="submit"
-            disabled={!accessToken || !code.trim() || publishing}
-            className="border-2 border-accent px-4 py-1.5 text-sm text-accent hover:bg-accent hover:text-accent-solid-ink disabled:opacity-50"
+            type="button"
+            onClick={() => (trying ? radio.pause() : tune && radio.play(tune.code))}
+            disabled={!tune}
+            className={buttonClass}
           >
-            {publishing ? 'Publishing…' : 'Publish'}
+            {trying ? 'Stop' : 'Try it'}
           </button>
-        </form>
-        {error && (
-          <p role="alert" className="mt-2 text-sm text-danger">
-            {error.issues?.[0]?.message ?? error.message}
-          </p>
-        )}
-      </SubmissionGate>
+        </div>
+        <p id="soundtrack-tune" aria-live="polite" className="m-0 min-h-5 text-sm text-muted">
+          {tune && (
+            <>
+              <span className="text-ink">{tune.name}</span> · {tune.key} · <code className="font-mono">{tune.code}</code>
+            </>
+          )}
+          {unplayable && <span className="text-danger">Not a song code the office radio can play.</span>}
+        </p>
+        <SubmissionGate what="Publishing soundtracks" inline>
+          <div className="flex flex-wrap items-end gap-3">
+            <label className="flex flex-col gap-1 text-sm text-muted">
+              Title (optional)
+              <input
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+                maxLength={80}
+                className="border-2 border-border bg-canvas px-2 py-1 text-sm text-ink"
+              />
+            </label>
+            <button
+              type="submit"
+              disabled={!accessToken || !typed || unplayable || publishing}
+              className="border-2 border-accent px-4 py-1.5 text-sm text-accent hover:bg-accent hover:text-accent-solid-ink disabled:opacity-50"
+            >
+              {publishing ? 'Publishing…' : 'Publish'}
+            </button>
+          </div>
+          {error && (
+            <p role="alert" className="mt-2 text-sm text-danger">
+              {error.issues?.[0]?.message ?? error.message}
+            </p>
+          )}
+        </SubmissionGate>
+      </form>
     </section>
   );
 }

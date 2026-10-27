@@ -17,7 +17,8 @@ describe('radioProtocol', () => {
 
   it('accepts the frame’s events', () => {
     expect(isRadioEvent({ channel: RADIO_CHANNEL, type: 'ready' })).toBe(true);
-    expect(isRadioEvent({ channel: RADIO_CHANNEL, type: 'described', tunes: {} })).toBe(true);
+    expect(isRadioEvent({ channel: RADIO_CHANNEL, type: 'described', tunes: {}, invalid: ['JAZZ-1-0'] })).toBe(true);
+    expect(isRadioEvent({ channel: RADIO_CHANNEL, type: 'described', tunes: {}, invalid: [1] })).toBe(false);
     expect(isRadioEvent({ channel: RADIO_CHANNEL, type: 'state', code: null, playing: false, blocked: false })).toBe(true);
 
     expect(isRadioEvent({ channel: RADIO_CHANNEL, type: 'state', playing: 'yes', blocked: false })).toBe(false);

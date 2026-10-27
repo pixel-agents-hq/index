@@ -38,6 +38,8 @@ export interface PauseTuneMessage {
 export type RadioCommand = DescribeTunesMessage | PlayTuneMessage | PauseTuneMessage;
 
 export interface TuneDescription {
+  /** The code as the radio writes it (upper case, the seed as 8 hex digits) — what `state.code` reports while it plays. */
+  code: string;
   /** The tune's own name, drawn from its seed by the composer ("Sunny Ledger Jig"). */
   name: string;
   /** "D mixolydian" */
@@ -50,11 +52,12 @@ export interface RadioReadyMessage {
   type: 'ready';
 }
 
-/** Frame → page: names for the codes asked about; a code the radio can't play is left out. */
+/** Frame → page: names for the codes asked about, keyed as asked; the ones the radio can't play in `invalid`. */
 export interface TunesDescribedMessage {
   channel: typeof RADIO_CHANNEL;
   type: 'described';
   tunes: Record<string, TuneDescription>;
+  invalid: string[];
 }
 
 /** Frame → page: what's on, after every change. */
@@ -99,7 +102,12 @@ export function isRadioEvent(data: unknown): data is RadioEvent {
     case 'ready':
       return true;
     case 'described':
-      return typeof message.tunes === 'object' && message.tunes !== null;
+      return (
+        typeof message.tunes === 'object' &&
+        message.tunes !== null &&
+        Array.isArray(message.invalid) &&
+        message.invalid.every((code: unknown) => typeof code === 'string')
+      );
     case 'state':
       return typeof message.playing === 'boolean' && typeof message.blocked === 'boolean';
     default:

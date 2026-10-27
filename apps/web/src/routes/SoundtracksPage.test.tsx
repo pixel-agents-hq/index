@@ -125,7 +125,12 @@ describe('SoundtracksPage', () => {
       { channel: RADIO_CHANNEL, type: 'describe', codes: ['TOWN-5-8F3A21C0'] },
       window.location.origin,
     );
-    say({ channel: RADIO_CHANNEL, type: 'described', tunes: { 'TOWN-5-8F3A21C0': { name: 'Sunny Ledger Jig', key: 'D mixolydian' } } });
+    say({
+      channel: RADIO_CHANNEL,
+      type: 'described',
+      tunes: { 'TOWN-5-8F3A21C0': { code: 'TOWN-5-8F3A21C0', name: 'Sunny Ledger Jig', key: 'D mixolydian' } },
+      invalid: [],
+    });
     // Untitled: the tune's own composed name stands in.
     expect(screen.getByRole('heading', { name: 'Sunny Ledger Jig' })).toBeInTheDocument();
     expect(screen.getByText('D mixolydian')).toBeInTheDocument();
@@ -148,7 +153,12 @@ describe('SoundtracksPage', () => {
     act(() => {
       window.dispatchEvent(
         new MessageEvent('message', {
-          data: { channel: RADIO_CHANNEL, type: 'described', tunes: { 'TOWN-5-8F3A21C0': { name: 'Spoofed', key: 'x' } } },
+          data: {
+            channel: RADIO_CHANNEL,
+            type: 'described',
+            tunes: { 'TOWN-5-8F3A21C0': { code: 'TOWN-5-8F3A21C0', name: 'Spoofed', key: 'x' } },
+            invalid: [],
+          },
           origin: window.location.origin,
           source: window,
         }),
@@ -176,5 +186,58 @@ describe('SoundtracksPage', () => {
 
     expect((await screen.findAllByText('RAIN-2-0000ABCD')).length).toBeGreaterThan(0);
     expect(requests.find((r) => r.method === 'POST' && r.url.includes('/api/v1/soundtracks'))?.body).toEqual({ code: 'rain-2-abcd' });
+  });
+
+  it('tries a typed code on the radio before publishing, without an account', async () => {
+    stubApi();
+    renderPage();
+    await screen.findByText('TOWN-5-8F3A21C0');
+    const { postMessage, say } = radioFrame();
+    say({ channel: RADIO_CHANNEL, type: 'ready' });
+
+    const tryIt = screen.getByRole('button', { name: 'Try it' });
+    expect(tryIt).toBeDisabled();
+    fireEvent.change(screen.getByLabelText('Song code'), { target: { value: ' night-2-abc ' } });
+    // Once typing pauses, the radio is asked about the code (trimmed), as Pixel Agents' radio reads it.
+    await waitFor(() =>
+      expect(postMessage).toHaveBeenCalledWith(
+        { channel: RADIO_CHANNEL, type: 'describe', codes: ['night-2-abc'] },
+        window.location.origin,
+      ),
+    );
+    say({
+      channel: RADIO_CHANNEL,
+      type: 'described',
+      tunes: { 'night-2-abc': { code: 'NIGHT-2-00000ABC', name: 'Idle Loop', key: 'E lydian' } },
+      invalid: [],
+    });
+    expect(screen.getByText('Idle Loop')).toBeInTheDocument();
+    expect(screen.getByText('NIGHT-2-00000ABC')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Try it' }));
+    expect(postMessage).toHaveBeenLastCalledWith(
+      { channel: RADIO_CHANNEL, type: 'play', code: 'NIGHT-2-00000ABC' },
+      window.location.origin,
+    );
+    say({ channel: RADIO_CHANNEL, type: 'state', code: 'NIGHT-2-00000ABC', playing: true, blocked: false });
+    fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
+    expect(postMessage).toHaveBeenLastCalledWith({ channel: RADIO_CHANNEL, type: 'pause' }, window.location.origin);
+  });
+
+  it('says when the radio can’t play a typed code, and won’t publish it', async () => {
+    location.hash = '#pixelIndexLoginCode=test-code';
+    stubApi();
+    renderPage();
+    await screen.findByText('TOWN-5-8F3A21C0');
+    const { say } = radioFrame();
+    say({ channel: RADIO_CHANNEL, type: 'ready' });
+
+    fireEvent.change(await screen.findByLabelText('Song code'), { target: { value: 'JAZZ-1-0' } });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Publish' })).toBeEnabled());
+    say({ channel: RADIO_CHANNEL, type: 'described', tunes: {}, invalid: ['JAZZ-1-0'] });
+
+    expect(await screen.findByText('Not a song code the office radio can play.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Publish' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Try it' })).toBeDisabled();
   });
 });
