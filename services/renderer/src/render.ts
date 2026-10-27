@@ -79,7 +79,7 @@ export type RenderCustomAsset =
     }
   | {
       kind: 'character';
-      /** Exactly `assets/decoded/characters.json`'s own per-entry shape — appended, not re-encoded. */
+      /** Exactly `characterSpritesLoaded`'s own per-character shape (8 frames a row) — passed through, not re-encoded. */
       sprites: { down: string[][][]; up: string[][][]; right: string[][][] };
     }
   | {
@@ -360,19 +360,32 @@ export class Renderer {
         }
       }
 
-      // #105: custom (uploaded) characters. `browserMock.ts` fetches
-      // `assets/decoded/characters.json` exactly like furniture's decoded
-      // JSON — verified against the real dev server, same as furniture above
-      // — so the same append-to-the-fetched-array technique generalizes
-      // directly. No per-PNG fallback route: this vendored checkout always
-      // serves the decoded endpoint (same bet furniture's own comment makes).
+      // #105: custom (uploaded) characters. Upstream's office now wears its
+      // cast of character profiles first, then any external `char_N.png`
+      // sprites, which reach the app only as a `characterSpritesLoaded`
+      // message (`characters/castMessages.ts` → `setExternalCharacterSprites`);
+      // `browserMock.ts` no longer fetches `assets/decoded/characters.json`
+      // and dispatches that message with an empty list. So the custom
+      // characters ride that same message: its `characters` are filled in on
+      // the way through, by the same dispatch wrapping as pets below (and for
+      // the same StrictMode reason, on every dispatch, not once).
       if (characterAssets.length > 0) {
-        await page.route('**/assets/decoded/characters.json', async (route) => {
-          const response = await route.fetch();
-          const characters = (await response.json()) as unknown[];
-          characters.push(...characterAssets.map((asset) => asset.sprites));
-          await route.fulfill({ response, json: characters });
-        });
+        await context.addInitScript((characters: unknown[]) => {
+          const realDispatch = window.dispatchEvent.bind(window);
+          window.dispatchEvent = (event: Event) => {
+            if (
+              event instanceof MessageEvent &&
+              event.data &&
+              typeof event.data === 'object' &&
+              (event.data as { type?: unknown }).type === 'characterSpritesLoaded'
+            ) {
+              return realDispatch(
+                new MessageEvent('message', { data: { ...(event.data as object), characters } }),
+              );
+            }
+            return realDispatch(event);
+          };
+        }, characterAssets.map((asset) => asset.sprites));
       }
 
       // #105: custom (uploaded) pets. Unlike furniture and characters, there
