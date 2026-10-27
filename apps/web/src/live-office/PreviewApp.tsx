@@ -368,7 +368,7 @@ export function PreviewApp() {
             onEditorSelectionChange={editor.handleEditorSelectionChange}
             onDeleteSelected={editor.handleDeleteSelected}
             onRotateSelected={editor.handleRotateSelected}
-            onDragMove={editor.handleDragMove}
+            onDrop={editor.handleDrop}
             editorTick={editor.editorTick}
             zoom={zoom}
             onZoomChange={setZoom}
@@ -409,7 +409,7 @@ export function PreviewApp() {
               <EditorToolbar
                 activeTool={editorState.activeTool}
                 selectedTileType={editorState.selectedTileType}
-                selectedFurnitureType={editorState.selectedFurnitureType}
+                selectedFurnitureType={editorState.placingType}
                 selectedFurnitureUid={editorState.selectedFurnitureUid}
                 selectedFurnitureColor={selectedFurnitureColor}
                 floorColor={editorState.floorColor}
@@ -423,6 +423,7 @@ export function PreviewApp() {
                 onSelectedFurnitureColorChange={editor.handleSelectedFurnitureColorChange}
                 pickedFurnitureColor={editorState.pickedFurnitureColor}
                 onPickedFurnitureColorChange={editor.handlePickedFurnitureColorChange}
+                onColorPickToggle={editor.handleColorPickToggle}
                 onFurnitureTypeChange={editor.handleFurnitureTypeChange}
                 {...(assets ? { loadedAssets: assets } : {})}
                 activePetTypes={office.getActivePetTypes()}
@@ -441,10 +442,10 @@ export function PreviewApp() {
                 onRemoveArea={editor.handleRemoveArea}
                 onRenameArea={editor.handleRenameArea}
                 onAreaColorChange={editor.handleAreaColorChange}
-                // Areas map to VS Code workspace folders upstream. A layout in
-                // the index has no workspace, so the tool stays available (areas
-                // are part of layout.json) but the mapping half of it is empty.
-                workspaceFolders={[]}
+                // Areas map to Directories upstream. A layout in the index has
+                // no Directories, so the tool stays available (areas are part of
+                // layout.json) but the mapping half of it is empty.
+                directories={[]}
                 areasAvailable
                 areaMappings={{}}
                 onAreaMappingChange={noop}

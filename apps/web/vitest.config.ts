@@ -13,6 +13,8 @@ export default defineConfig({
     // that reach this (loadFurnitureCategories() et al.) only care that it's
     // a stable, well-formed commit-shaped string, not the real pin.
     __PIXEL_AGENTS_COMMIT__: JSON.stringify('0'.repeat(40)),
+    __PIXEL_AGENTS_VERSION__: JSON.stringify('9.9.9'),
+    __PIXEL_AGENTS_REPO__: JSON.stringify('https://git.example.test/pixel-agents'),
   },
   test: {
     environment: 'jsdom',

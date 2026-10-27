@@ -175,13 +175,40 @@ function ThemeToggle() {
   );
 }
 
+/**
+ * Which Pixel Agents this build was compiled against: the version, linked to
+ * the upstream repository's tree at the pinned commit. The pin decides which
+ * furniture exists and what the live viewer runs, so "which upstream?" is a
+ * question this site should answer in one click. Plain text when the build
+ * could not read the repository URL, rather than a link to nowhere.
+ */
+function UpstreamPin() {
+  const label = `Pixel Agents ${__PIXEL_AGENTS_VERSION__ ? `v${__PIXEL_AGENTS_VERSION__}` : __PIXEL_AGENTS_COMMIT__.slice(0, 7)}`;
+  if (!__PIXEL_AGENTS_REPO__) return <span className="text-xs text-muted">{label}</span>;
+
+  return (
+    <a
+      href={`${__PIXEL_AGENTS_REPO__}/tree/${__PIXEL_AGENTS_COMMIT__}`}
+      target="_blank"
+      rel="noreferrer"
+      title={`Pinned to ${__PIXEL_AGENTS_COMMIT__}`}
+      className="text-xs text-muted hover:text-accent"
+    >
+      {label}
+    </a>
+  );
+}
+
 export function Layout() {
   return (
     <div className="min-h-screen bg-canvas text-ink">
       <header className="flex items-center justify-between gap-4 border-b-2 border-border px-6 py-4">
-        <Link to="/" className="font-display text-xl tracking-tight text-ink">
-          Pixel Index
-        </Link>
+        <div className="flex items-baseline gap-3">
+          <Link to="/" className="font-display text-xl tracking-tight text-ink">
+            Pixel Index
+          </Link>
+          <UpstreamPin />
+        </div>
         <div className="flex items-center gap-4">
           <Nav />
           <ThemeToggle />

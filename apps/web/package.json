@@ -21,6 +21,7 @@
     "react-router-dom": "^7.9.5"
   },
   "devDependencies": {
+    "@material-symbols/font-700": "^0.46.0",
     "@pixel-index/layout-core": "*",
     "@tailwindcss/vite": "^4.2.2",
     "@testing-library/jest-dom": "^6.6.3",

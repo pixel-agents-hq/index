@@ -15,6 +15,37 @@ const PIXEL_AGENTS_COMMIT = fs
   .trim();
 
 /**
+ * The pinned upstream's release version and repository, for the header's
+ * "Pixel Agents vX.Y.Z" link (Layout.tsx). Both are best-effort: the link
+ * degrades to plain text rather than failing a build that lacks either.
+ *
+ * The version is the submodule's own package.json (the Docker build copies
+ * it). The repository comes from `.gitmodules`, the one place the submodule
+ * URL is declared, so a fork pointing at its own upstream links there.
+ */
+function readPixelAgentsVersion(): string | null {
+  try {
+    const pkg = JSON.parse(
+      fs.readFileSync(path.resolve(HERE, '../../vendor/pixel-agents/package.json'), 'utf8'),
+    ) as { version?: unknown };
+    return typeof pkg.version === 'string' ? pkg.version : null;
+  } catch {
+    return null;
+  }
+}
+
+function readPixelAgentsRepo(): string | null {
+  try {
+    const gitmodules = fs.readFileSync(path.resolve(HERE, '../../.gitmodules'), 'utf8');
+    const section = gitmodules.split(/^\[submodule /m).find((s) => s.startsWith('"vendor/pixel-agents"'));
+    const url = section?.match(/^\s*url\s*=\s*(https:\/\/\S+?)(?:\.git)?\s*$/m)?.[1];
+    return url ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * GitHub Pages has no server-side rewrite rules, so a hard refresh (or a
  * shared link) on any deep route — `/layouts/some-office` — 404s before the
  * SPA's router ever runs. This writes a `404.html` that stashes the visitor's
@@ -158,6 +189,8 @@ export default defineConfig(({ mode }) => {
     define: {
       __VENDOR_PREVIEW__: JSON.stringify(isVendorPreviewBuild),
       __PIXEL_AGENTS_COMMIT__: JSON.stringify(PIXEL_AGENTS_COMMIT),
+      __PIXEL_AGENTS_VERSION__: JSON.stringify(readPixelAgentsVersion()),
+      __PIXEL_AGENTS_REPO__: JSON.stringify(readPixelAgentsRepo()),
     },
     // The vendor-update workflow installs the submodule's own dependencies
     // before exercising this build. Without dedupe, source imported across

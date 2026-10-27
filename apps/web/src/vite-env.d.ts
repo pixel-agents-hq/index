@@ -23,6 +23,10 @@ interface ImportMetaEnv {
 declare const __VENDOR_PREVIEW__: boolean;
 /** Pinned Pixel Agents commit, used to address immutable live-office assets. */
 declare const __PIXEL_AGENTS_COMMIT__: string;
+/** The pin's release version (its package.json), or null if unreadable at build time. */
+declare const __PIXEL_AGENTS_VERSION__: string | null;
+/** Upstream repository URL from `.gitmodules`, without `.git`; null if unreadable. */
+declare const __PIXEL_AGENTS_REPO__: string | null;
 
 // Upstream declares this in testHooks.ts, which the full Pixel Agents App
 // imports. The focused live-office wrapper intentionally does not import that
