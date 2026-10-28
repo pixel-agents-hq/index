@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pixatar"
+version = "0.0.0"
+description = "Deterministic Pixel Agents avatars as PNG, drawn by the @pixel-index/pixatar npm package's CLI"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+# none: the pixels come from the pixatar command (Node 22+), see README.md
+dependencies = []
+
+[project.optional-dependencies]
+test = ["pytest>=7"]
+
+[project.urls]
+Repository = "https://github.com/pixel-agents-hq/index"
+Source = "https://github.com/pixel-agents-hq/index/tree/develop/packages/pixatar/python"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+pixatar = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

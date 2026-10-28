@@ -17,3 +17,14 @@ test-results/
 .env
 .env.local
 .env.*.local
+
+# The pinned vendor wardrobe, baked by packages/pixatar/scripts/generate-wardrobe.mjs
+# before every build, test and typecheck. Never committed, so it cannot drift
+# from the pin.
+packages/pixatar/src/generated/
+
+# The Python avatar client (packages/pixatar/python).
+__pycache__/
+*.egg-info/
+.pytest_cache/
+packages/pixatar/python/build/

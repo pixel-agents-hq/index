@@ -19,6 +19,10 @@ area:frontend:
           # edge), so a pin bump is a frontend-relevant change too.
           - vendor/pixel-agents
           - vendor/pixel-agents.commit
+          # The avatar package: its one consumer in this repo is the web
+          # character designer, so it takes that consumer's area, as
+          # layout-core does below.
+          - packages/pixatar/**
 
 area:api:
   - changed-files:

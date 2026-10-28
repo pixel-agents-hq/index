@@ -446,6 +446,32 @@ way the layout editor runs upstream's editor in `live-office.html`:
   published as it looks: a character config doesn't carry custom items — upstream's own
   *Save config* doesn't either — so the page says so and disables Publish.
 
+#### Seeds: a character from any text, like an identicon
+
+Above the frame, **Start from a seed** (`components/SeedPanel.tsx`, `seeds.ts`) makes a
+character from a seed with the index's own avatar package,
+[`@pixel-index/pixatar`](../packages/pixatar/README.md), and dresses the character on
+the stage as it (the frame's `wear` command: one undo step, the character keeps its id
+and name). It works both ways: whatever is on the stage, however it got there, is shown
+with its seed code, its 20×20 avatar on a background colour derived from the seed, its
+walk/type/read animation and PNG downloads (avatar at 20–320 px, sprite sheet), so every
+edit in the Characters view makes a new seed. Publish then publishes it like any other
+character. The two kinds of seed promise different things:
+
+- **Free text** (a name, an email address, a user id) is hashed into a character, which
+  appears as you type. The same text makes the same character at a given vendor pin. A
+  bump that adds wardrobe parts can deal it differently.
+- **A seed code** (`px.` + base64url) *is* the character, written down: its exact parts
+  and colours, and whether its avatar is transparent (the **Transparent avatar**
+  toggle). It keeps its character across versions, as long as Pixel Agents keeps the
+  parts it names. A text's code is what to keep to hold on to its character for good.
+
+`/assets/design?seed=px.…` and `?text=…` open the designer on a seed (`?from=` wins when
+both are given). After a seed has been used on the page, the address follows the
+character, so **Copy link** shares it. These are query parameters rather than pixatar's
+original `#px.` / `#t.` fragments, because the index's sign-in already arrives in the
+fragment.
+
 ### Soundtracks: their own table
 
 A song code is the whole tune: there is no audio, no sprite and no file to import, only
