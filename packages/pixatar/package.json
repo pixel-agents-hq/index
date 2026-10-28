@@ -1,0 +1,60 @@
+{
+  "name": "@pixel-index/pixatar",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Deterministic Pixel Agents character avatars: a seed makes the same character, sprite sheet and avatar every time",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "pixatar": "./dist/cli.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "LICENSE-pixel-agents"
+  ],
+  "keywords": [
+    "avatar",
+    "identicon",
+    "pixel-art",
+    "pixel-agents",
+    "sprite"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pixel-agents-hq/index.git",
+    "directory": "packages/pixatar"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "generate": "node scripts/generate-wardrobe.mjs",
+    "prebuild": "npm run generate",
+    "build": "tsup",
+    "pretest": "npm run generate",
+    "test": "vitest run",
+    "pretypecheck": "npm run generate",
+    "typecheck": "tsc --noEmit",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "fflate": "^0.8.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/pngjs": "^6.0.5",
+    "pngjs": "^7.0.0",
+    "tsup": "^8.5.0",
+    "typescript": "~5.9.3",
+    "vitest": "^4.1.10"
+  }
+}

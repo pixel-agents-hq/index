@@ -112,6 +112,24 @@ moved: run `npm run builtin-profiles` and commit the regenerated
 the step-2 harness again at the final pin. Commit the gitlink and
 `vendor/pixel-agents.commit` together (CI's drift check fails otherwise).
 
+The avatar package (`packages/pixatar`) bakes the pinned wardrobe and bundles
+upstream's renderer, so `npm test --workspace @pixel-index/pixatar` runs against
+the new pin too:
+
+- **`test/fixtures/legacy-seeds.json` must never change.** It pins what existing
+  seed codes decode to, and people store those codes. If a bump breaks it,
+  upstream removed or renamed a part that a code names. Fix that on the index side,
+  or take it upstream (step 4).
+- **The pinned text seeds and snapshots** (`test/pinned.test.ts`,
+  `test/__snapshots__/`) can change on purpose when the bump adds parts or redraws
+  art. Update them deliberately (`npx vitest run -u` in `packages/pixatar` for the
+  snapshots, by hand for `pinned.test.ts`, and the same values in
+  `python/tests/test_pixatar.py`, which CI's Python job checks). Say in the PR body
+  that free-text seeds now deal differently. The web's `seeds.test.ts` and
+  `CharacterDesignerPage.test.tsx` pin `octocat`'s code as well.
+- The tests check that the compact seed tables still cover every slot and colour
+  key upstream has. When they don't, the failure says what to append.
+
 Never run a repo-wide formatter that isn't the repo's own: a stray `npx prettier`
 without the repo config rewrote all of `render.ts` once.
 

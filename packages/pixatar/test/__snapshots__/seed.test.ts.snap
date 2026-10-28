@@ -1,0 +1,9 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`text seeds > are pinned for this wardrobe (a vendor bump that re-deals them shows here) 1`] = `
+[
+  "px.ASMByrHtCcOaAj1fXEBDyipVOErZBwFd2AE_HAZdVTbyDX2JAR3X5AldBTX_Cn2IAR3U-gBCXzgIdbQBurY",
+  "px.ASMByrGtA8OaAj2dhcssAL62PQUBXckCMA4GfRs1CfsKfdABSwMLC30NPP_-CH3FAkX8AQ",
+  "px.ASMBP2eND8OaAj2dhdPBtj29A59gBwFdmwEsEgw8oQJjlwGxAQZ9CQW4sQ19rAFFBAEKfYgBHdT6C31VRQEBAEJfOA",
+]
+`;

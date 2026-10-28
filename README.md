@@ -43,6 +43,8 @@ applies it.
 ## Self-hosting
 
 An npm workspace: `packages/layout-core` (validation, shared by everything below),
+[`packages/pixatar`](packages/pixatar/README.md) (deterministic character avatars from
+a seed, with a `pixatar` command and a [Python client](packages/pixatar/python/README.md)),
 `apps/web` (the gallery SPA), `services/api` (Fastify + Postgres, the public API and
 auth), and `services/renderer` (Playwright + the pinned upstream, draws every preview).
 

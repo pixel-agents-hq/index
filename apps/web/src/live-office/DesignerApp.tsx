@@ -83,6 +83,30 @@ function postSelection(): void {
   });
 }
 
+/** The fields that say which character a profile is, rather than how it looks. */
+const IDENTITY_FIELDS = new Set(['id', 'name']);
+
+/**
+ * Dress the character on the stage as `look` (a seed's profile), validated as
+ * upstream validates a save: one undo step, its id and name kept. An empty
+ * cast gets the look as its first character instead.
+ */
+function wear(look: Record<string, unknown>): void {
+  const parsed: CharacterProfile | undefined = parseCharacterProfiles([{ ...look, id: newCharacterId() }])?.[0];
+  if (!parsed) return;
+  const { draft, profiles, current } = castStore.getState();
+  if ((draft ?? profiles).at(current) === undefined) {
+    if (castStore.add([{ ...parsed, name: 'Pixatar' }], 0)) castStore.select(0);
+    return;
+  }
+  castStore.update((draft) => {
+    const fields = draft as unknown as Record<string, unknown>;
+    for (const key of Object.keys(fields)) if (!IDENTITY_FIELDS.has(key)) Reflect.deleteProperty(fields, key);
+    const { id: _id, name: _name, ...worn } = structuredClone(parsed);
+    Object.assign(draft, worn);
+  });
+}
+
 function usePhone(): boolean {
   const [phone, setPhone] = useState(() => window.matchMedia(MOBILE_MEDIA_QUERY).matches);
   useEffect(() => {
@@ -106,6 +130,10 @@ export function DesignerApp() {
     function onMessage(event: MessageEvent) {
       if (event.origin !== window.location.origin || event.source !== window.parent) return;
       if (!isDesignerCommand(event.data)) return;
+      if (event.data.type === 'wear') {
+        wear(event.data.profile);
+        return;
+      }
       // A copy: its own id, so publishing or editing it never touches the original's.
       const profile = { ...(event.data.profile as unknown as CharacterProfile), id: newCharacterId() };
       const parsed: CharacterProfile | undefined = parseCharacterProfiles([profile])?.[0];

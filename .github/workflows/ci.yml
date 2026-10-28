@@ -156,6 +156,13 @@ jobs:
       - name: Build the web SPA
         run: npm run build --workspace @pixel-index/web
 
+      # The avatar package is private for now but kept ready to publish
+      # (packages/pixatar/PUBLISHING.md): this is the tarball `npm publish`
+      # would ship, so a packaging slip shows on the PR rather than on the day
+      # someone publishes it.
+      - name: The avatar package packs cleanly
+        run: npm pack --dry-run --workspace @pixel-index/pixatar
+
   api-e2e:
     name: API end-to-end (real Postgres + renderer + API)
     runs-on: ubuntu-latest
@@ -276,6 +283,11 @@ jobs:
       # this job's real Chromium. It guards the browser integration that a
       # renderer screenshot alone cannot: decoded asset sidecars, OfficeCanvas,
       # ToolOverlay CSS, postMessage, controls and persisted fallback mode.
+      # The web build imports the avatar package's dist, and test:e2e is
+      # workspace-scoped, so the root's pre* hooks never build it.
+      - name: Build the avatar package
+        run: npm run build:pixatar
+
       - name: Live layout preview end-to-end
         run: npm run test:e2e --workspace @pixel-index/web
 
@@ -286,3 +298,49 @@ jobs:
           name: live-preview-failure
           path: apps/web/test-results/
           if-no-files-found: ignore
+
+  pixatar-python:
+    name: Python avatar client against the real CLI
+    runs-on: ubuntu-latest
+    # How a Python project uses the avatar package: packages/pixatar/python is
+    # a dependency-free client that runs the package's `pixatar` command in a
+    # Node process (`pixatar serve`). Installed here the way a project would
+    # install them — the client with pip, the CLI from the npm tarball onto the
+    # PATH, which is where the client looks when nothing names the command —
+    # and checked against the JavaScript package's pinned codes and PNG hashes.
+    strategy:
+      matrix:
+        # The oldest Python the client supports, and the newest.
+        python-version: ['3.10', '3.14']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install index tooling
+        run: npm ci
+
+      # Installed from the tarball rather than run from the checkout, so a
+      # packaging slip (a file missing from `files`, a broken bin) fails here.
+      - name: Install the pixatar command from the npm tarball onto the PATH
+        run: |
+          npm pack --workspace @pixel-index/pixatar --pack-destination "$RUNNER_TEMP"
+          npm install --global "$RUNNER_TEMP"/pixel-index-pixatar-*.tgz
+          command -v pixatar
+          pixatar --version
+
+      - name: Install the Python client
+        run: pip install './packages/pixatar/python[test]'
+
+      - name: Python client tests, with the command found on the PATH
+        working-directory: packages/pixatar/python
+        run: pytest
