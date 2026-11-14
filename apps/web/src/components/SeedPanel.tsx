@@ -290,6 +290,13 @@ export default function SeedPanel({
     }
   }
 
+  function linkFor(seed: string): string {
+    const url = new URL(window.location.href);
+    url.search = searchOf({ kind: 'code', value: seed }).toString();
+    url.hash = '';
+    return url.toString();
+  }
+
   const name = (typeof selection?.name === 'string' && selection.name.trim() ? selection.name.trim() : 'character').replace(
     /[^\w.-]+/g,
     '-',
@@ -372,7 +379,7 @@ export default function SeedPanel({
               <button type="button" onClick={() => void copy('seed', look.seed)} className={buttonClass} aria-live="polite">
                 {copied === 'seed' ? 'Copied' : 'Copy seed'}
               </button>
-              <button type="button" onClick={() => void copy('link', window.location.href)} className={buttonClass} aria-live="polite">
+              <button type="button" onClick={() => void copy('link', linkFor(look.seed))} className={buttonClass} aria-live="polite">
                 {copied === 'link' ? 'Copied' : 'Copy link'}
               </button>
               <label
