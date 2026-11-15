@@ -19,6 +19,12 @@ definition of "what is a valid layout," consumed by `api` (submission validation
 `renderer`/CI (`npm run validate`), and nothing else, so there's no second copy of the
 rules to drift out of sync.
 
+`packages/pixatar` is the other shared library: deterministic character avatars from
+a seed, drawn with the pinned Pixel Agents' own wardrobe and renderer, which it bakes
+and bundles into its dist. `web`'s character designer uses it, and its `pixatar`
+command (with the Python client in `packages/pixatar/python`) serves projects outside
+this repo. See [its README](../packages/pixatar/README.md).
+
 ## How they talk to each other
 
 ```mermaid

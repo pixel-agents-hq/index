@@ -19,7 +19,18 @@ export interface OpenProfileMessage {
   profile: Record<string, unknown>;
 }
 
-export type DesignerCommand = OpenProfileMessage;
+/**
+ * Page → frame: dress the character on the stage as this profile — the look a
+ * seed makes (`components/SeedPanel.tsx`). One undo step, and the character
+ * keeps its id and name, so a seed restyles it rather than adding to the cast.
+ */
+export interface WearProfileMessage {
+  channel: typeof DESIGNER_CHANNEL;
+  type: 'wear';
+  profile: Record<string, unknown>;
+}
+
+export type DesignerCommand = OpenProfileMessage | WearProfileMessage;
 
 /** Frame → page: the frame is listening. */
 export interface DesignerReadyMessage {
@@ -59,7 +70,7 @@ const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
 export function isDesignerCommand(data: unknown): data is DesignerCommand {
-  return onChannel(data) && data.type === 'open' && isObject(data.profile);
+  return onChannel(data) && (data.type === 'open' || data.type === 'wear') && isObject(data.profile);
 }
 
 export function isDesignerEvent(data: unknown): data is DesignerEvent {

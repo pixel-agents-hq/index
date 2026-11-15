@@ -1,0 +1,29 @@
+{
+  "extends": "../../tsconfig.strict.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    // DOM for ImageData-shaped types only: the package runs in Node and in the browser.
+    "lib": ["ES2022", "DOM"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "types": ["node"],
+
+    // src/vendor.ts imports vendor/pixel-agents' TypeScript *sources* (the
+    // profile format, wardrobe, renderer and randomizer), so tsc typechecks
+    // them along with the package, and tsup bundles them into dist. They do
+    // not satisfy these two flags and are not ours to fix — the same opt-out,
+    // for the same reason, as apps/web/tsconfig.live-office.json. Everything
+    // else in tsconfig.strict.json still applies. Consumers only ever see the
+    // bundled dist and its .d.ts, so the strict projects importing this
+    // package are unaffected.
+    "noUncheckedIndexedAccess": false,
+    "exactOptionalPropertyTypes": false,
+
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "noEmit": true
+  },
+  "include": ["src", "test", "tsup.config.ts", "vitest.config.ts"]
+}

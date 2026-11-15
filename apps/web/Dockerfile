@@ -16,8 +16,9 @@ COPY package.json package-lock.json ./
 # often as they do, and the layer caching should reflect that.
 COPY tsconfig.strict.json ./
 COPY packages/layout-core/package.json ./packages/layout-core/
+COPY packages/pixatar/package.json ./packages/pixatar/
 COPY apps/web/package.json ./apps/web/
-RUN npm ci --workspace @pixel-index/layout-core --workspace @pixel-index/web --include-workspace-root
+RUN npm ci --workspace @pixel-index/layout-core --workspace @pixel-index/pixatar --workspace @pixel-index/web --include-workspace-root
 
 # The web build's own build/liveOfficeAssets.ts imports @pixel-index/layout-core
 # (furnitureCategories()) — like every other workspace that depends on it, this
@@ -38,6 +39,13 @@ COPY vendor/pixel-agents/package.json ./vendor/pixel-agents/package.json
 COPY vendor/pixel-agents/core ./vendor/pixel-agents/core
 COPY vendor/pixel-agents/webview-ui/src ./vendor/pixel-agents/webview-ui/src
 COPY vendor/pixel-agents/webview-ui/public ./vendor/pixel-agents/webview-ui/public
+
+# The character designer's seeds draw with the avatar package, which bakes the
+# pinned wardrobe (webview-ui/src/characters/art, copied above) into its dist.
+# It reads the pin from vendor/pixel-agents.commit, not git: there is no git
+# in this image.
+COPY packages/pixatar ./packages/pixatar
+RUN npm run build --workspace @pixel-index/pixatar
 
 # Baked in at build time, like every other build-time-only config value in
 # this app (vite.config.ts) — there is no server here to inject it at

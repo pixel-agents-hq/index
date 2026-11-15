@@ -1,11 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { ApiError, apiUrl } from '../api/client';
 import { submitCharacterProfile } from '../api/manageClient';
 import { useAuth } from '../auth/authState';
 import { SubmissionGate } from '../components/SubmissionGate';
-import { DESIGNER_CHANNEL, isDesignerEvent } from '../live-office/designerProtocol';
+import { DESIGNER_CHANNEL, type DesignerCommand, isDesignerEvent } from '../live-office/designerProtocol';
+
+// Its own chunk: the avatar package carries the whole baked wardrobe, which
+// only this page needs.
+const SeedPanel = lazy(() => import('../components/SeedPanel'));
 
 /**
  * Design a character with Pixel Agents' own Characters view, without leaving
@@ -17,6 +21,8 @@ import { DESIGNER_CHANNEL, isDesignerEvent } from '../live-office/designerProtoc
  * signed-in community member.
  *
  * `?from=<assetId>` opens a copy of a published profile to remix.
+ * `?seed=px.…` / `?text=…` dresses the character on the stage as a seed's
+ * character (`components/SeedPanel.tsx`).
  */
 export function CharacterDesignerPage() {
   const { accessToken, user } = useAuth();
@@ -31,6 +37,15 @@ export function CharacterDesignerPage() {
   const [customItems, setCustomItems] = useState<string[]>([]);
   const [publishing, setPublishing] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
+  const [ready, setReady] = useState(false);
+
+  const command = useCallback((message: DesignerCommand) => {
+    frameRef.current?.contentWindow?.postMessage(message, window.location.origin);
+  }, []);
+  const wear = useCallback(
+    (look: object) => command({ channel: DESIGNER_CHANNEL, type: 'wear', profile: { ...look } }),
+    [command],
+  );
 
   const openFrom = useCallback(async () => {
     if (!from) return;
@@ -38,22 +53,21 @@ export function CharacterDesignerPage() {
       const response = await fetch(apiUrl(`/api/v1/assets/${encodeURIComponent(from)}/profile.json`));
       if (!response.ok) throw new ApiError(response.status, `Couldn't open "${from}" in the designer.`);
       const opened = (await response.json()) as Record<string, unknown>;
-      frameRef.current?.contentWindow?.postMessage(
-        { channel: DESIGNER_CHANNEL, type: 'open', profile: opened },
-        window.location.origin,
-      );
+      command({ channel: DESIGNER_CHANNEL, type: 'open', profile: opened });
     } catch (caught) {
       setError(caught instanceof ApiError ? caught : new ApiError(0, `Couldn't open "${from}" in the designer.`));
     }
-  }, [from]);
+  }, [from, command]);
 
   useEffect(() => {
     function onMessage(event: MessageEvent) {
       if (event.origin !== window.location.origin || event.source !== frameRef.current?.contentWindow) return;
       if (!isDesignerEvent(event.data)) return;
       const message = event.data;
-      if (message.type === 'ready') void openFrom();
-      else if (message.type === 'selection') {
+      if (message.type === 'ready') {
+        setReady(true);
+        void openFrom();
+      } else if (message.type === 'selection') {
         setProfile(message.profile);
         setCustomItems(message.customItems);
       } else void navigate('/assets');
@@ -119,6 +133,15 @@ export function CharacterDesignerPage() {
           ))}
         </div>
       )}
+
+      <Suspense fallback={null}>
+        <SeedPanel
+          selection={profile}
+          ready={ready}
+          remixing={from !== null}
+          onWear={wear}
+        />
+      </Suspense>
 
       <iframe
         ref={frameRef}

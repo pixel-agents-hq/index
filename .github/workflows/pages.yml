@@ -42,6 +42,11 @@ jobs:
       - name: Build layout-core
         run: npm run build:core
 
+      # The character designer's seeds import the avatar package's dist,
+      # which bakes the pinned wardrobe in.
+      - name: Build the avatar package
+        run: npm run build:pixatar
+
       - name: Build the SPA
         working-directory: apps/web
         env:

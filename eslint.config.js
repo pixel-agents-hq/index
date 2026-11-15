@@ -169,7 +169,7 @@ const coreCorrectnessRules = {
 
 /**
  * The vendored upstream is reachable from the live-office wrapper and its build
- * script, and nowhere else.
+ * script, and from the avatar package's one vendor module, and nowhere else.
  *
  * Not tidiness: `apps/web/tsconfig.app.json` runs at full strictness and
  * *excludes* `src/live-office`, because vendor sources only compile under
@@ -181,7 +181,8 @@ const coreCorrectnessRules = {
 const noVendorOutsideLiveOffice = {
   group: ['**/vendor/pixel-agents/**'],
   message:
-    'Only apps/web/src/live-office/** and apps/web/build/** may import the vendored upstream — ' +
+    'Only apps/web/src/live-office/**, apps/web/build/** and packages/pixatar/src/vendor.ts may ' +
+    'import the vendored upstream — ' +
     'everything else compiles at a strictness those sources do not meet. Go through ' +
     '@pixel-index/layout-core, or through the live-office wrapper.',
 };
@@ -482,6 +483,27 @@ export default defineConfig([
         noTestScaffoldingInProduction,
         noVitestInProduction,
         noNodeBuiltinsInTheSpa,
+      ),
+    },
+  },
+  {
+    /**
+     * The avatar package's one window onto the vendored upstream.
+     *
+     * pixatar draws with Pixel Agents' own profile format, wardrobe, renderer
+     * and randomizer, so it compiles their sources (at the reduced strictness
+     * of packages/pixatar/tsconfig.json, like live-office) and tsup bundles
+     * them into its dist. Every vendor import goes through this one module, so
+     * the exception is exactly one file wide; the rest of the package, and
+     * every consumer of its dist, stays vendor-free.
+     */
+    files: ['packages/pixatar/src/vendor.ts'],
+    rules: {
+      ...boundaries(
+        noCrossWorkspaceReachAround,
+        noDeepWorkspaceImport,
+        noTestScaffoldingInProduction,
+        noVitestInProduction,
       ),
     },
   },
