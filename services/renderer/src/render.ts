@@ -592,11 +592,75 @@ export class Renderer {
     return Buffer.from(dataUrl.replace(/^data:image\/png;base64,/, ''), 'base64');
   }
 
+  /**
+   * A character profile (upstream's Characters view "Save config" JSON)
+   * composed into its office sprites by upstream's OWN browser code: the
+   * page imports `characters/profiles.ts`'s `parseConfigFile` (the exact
+   * check, migration and naming its "Load config" runs), `loadWardrobe.ts`
+   * and `renderer.ts` straight from the pinned checkout's dev server, so a
+   * profile reads, migrates and draws here exactly as it would in Pixel
+   * Agents — there is no hand-kept copy of the wardrobe or its renderer to
+   * drift. `config` is the file's text, verbatim.
+   */
+  async composeCharacter(config: string, fileName: string, timeoutMs = this.deps.defaultTimeoutMs): Promise<ComposeResult> {
+    if (!this.browser) throw new Error('Renderer has not been started.');
+    const browser = this.browser;
+    const release = await this.gate.acquire();
+    try {
+      return await withTimeout(this.composeOnce(browser, config, fileName), timeoutMs);
+    } finally {
+      release();
+    }
+  }
+
+  private async composeOnce(browser: Browser, config: string, fileName: string): Promise<ComposeResult> {
+    const context = await browser.newContext();
+    try {
+      const page = await context.newPage();
+      // Any same-origin document will do: the modules are imported from the
+      // dev server, and nothing of the app itself needs to boot for this.
+      const blank = new URL('__pixel-index-compose', this.deps.devServer.url).href;
+      await page.route(blank, (route) => route.fulfill({ contentType: 'text/html', body: '<!doctype html>' }));
+      await page.goto(blank);
+      // A string, not a function: the test runner's transpiler names inner
+      // arrow functions with a helper that doesn't exist in the page.
+      const result: ComposeResult = await page.evaluate(`(async ({ config, fileName }) => {
+        const at = (file) => new URL(file, location.href).href;
+        const [{ parseConfigFile }, { loadWardrobe }, { CharacterRenderer }, { sheetToOfficeSprites }] = await Promise.all([
+          import(at('/src/characters/profiles.ts')),
+          import(at('/src/characters/loadWardrobe.ts')),
+          import(at('/src/characters/renderer.ts')),
+          import(at('/src/characters/officeSprites.ts')),
+        ]);
+        const wardrobe = await loadWardrobe();
+        const profiles = parseConfigFile(wardrobe, config, fileName);
+        if (!profiles) return { ok: false, message: 'Pixel Agents could not read this file as a character config.' };
+        if (profiles.length !== 1) {
+          return { ok: false, message: 'One character per upload: this config holds ' + profiles.length + '.' };
+        }
+        const sprites = sheetToOfficeSprites(new CharacterRenderer(wardrobe).sheet(profiles[0]));
+        return { ok: true, profile: profiles[0], sprites };
+      })(${JSON.stringify({ config, fileName })})`);
+      return result;
+    } finally {
+      await context.close();
+    }
+  }
+
   async close(): Promise<void> {
     await this.browser?.close();
     this.browser = undefined;
   }
 }
+
+/** `Renderer.composeCharacter`'s answer: the migrated profile and its office sprites (8 frames a row), or why not. */
+export type ComposeResult =
+  | {
+      ok: true;
+      profile: Record<string, unknown> & { name?: string };
+      sprites: { down: string[][][]; up: string[][][]; right: string[][][] };
+    }
+  | { ok: false; message: string };
 
 async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   if (ms <= 0) return promise;

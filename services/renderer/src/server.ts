@@ -1,5 +1,5 @@
 /**
- * The HTTP surface: POST /render, GET /health, GET /ready.
+ * The HTTP surface: POST /render, POST /compose-character, GET /health, GET /ready.
  *
  * This service takes attacker-controlled JSON and runs a browser on it, so
  * everything here is about refusing work before it reaches Chromium: a body
@@ -43,7 +43,7 @@ export interface ReadyBody {
 
 /** Every error this service returns. `issues` is only set for invalid_layout. */
 export interface RenderErrorBody {
-  error: 'invalid_scale' | 'invalid_layout' | 'render_timeout' | 'render_failed';
+  error: 'invalid_scale' | 'invalid_layout' | 'invalid_profile' | 'render_timeout' | 'render_failed';
   message?: string;
   issues?: ValidationIssue[];
 }
@@ -175,6 +175,33 @@ export async function buildServer({
         return reply.code(504).send({ error: 'render_timeout', message: error.message });
       }
       request.log.error({ err: error }, 'render failed');
+      return reply.code(500).send({
+        error: 'render_failed',
+        message: error instanceof Error ? error.message : 'unknown error',
+      });
+    }
+  });
+
+  // A character profile (upstream's Characters view config JSON) composed by
+  // upstream's own wardrobe renderer — services/api stores the sprites beside
+  // the profile, so a published profile previews, animates and renders like
+  // any character. `config` is the uploaded file's text, verbatim.
+  app.post('/compose-character', async (request, reply) => {
+    const body = request.body as { config?: unknown; fileName?: unknown } | undefined;
+    if (typeof body?.config !== 'string') {
+      return reply.code(400).send({ error: 'invalid_profile', message: 'config must be the config file’s text.' });
+    }
+    const fileName = typeof body.fileName === 'string' ? body.fileName : 'character.json';
+    try {
+      const result = await renderer.composeCharacter(body.config, fileName);
+      if (!result.ok) return await reply.code(422).send({ error: 'invalid_profile', message: result.message });
+      return { profile: result.profile, sprites: result.sprites };
+    } catch (error) {
+      if (error instanceof RenderTimeoutError) {
+        request.log.warn({ err: error }, 'compose timed out');
+        return reply.code(504).send({ error: 'render_timeout', message: error.message });
+      }
+      request.log.error({ err: error }, 'compose failed');
       return reply.code(500).send({
         error: 'render_failed',
         message: error instanceof Error ? error.message : 'unknown error',

@@ -111,6 +111,22 @@ describe('AssetFilterBar', () => {
     });
   });
 
+  it('offers Character profile as a Kind: characters published as a Pixel Agents profile', async () => {
+    const onChange = vi.fn();
+    const { rerender } = render(<AssetFilterBar filters={DEFAULT_ASSET_FILTERS} onChange={onChange} />);
+    await waitForCategoriesLoaded();
+
+    fireEvent.change(screen.getByLabelText('Kind'), { target: { value: 'profile' } });
+    const picked = { ...DEFAULT_ASSET_FILTERS, assetKind: 'character' as const, profile: true };
+    expect(onChange).toHaveBeenCalledWith(picked);
+
+    rerender(<AssetFilterBar filters={picked} onChange={onChange} />);
+    expect(screen.getByLabelText('Kind')).toHaveValue('profile');
+    // Back to plain Character drops the profile narrowing.
+    fireEvent.change(screen.getByLabelText('Kind'), { target: { value: 'character' } });
+    expect(onChange).toHaveBeenLastCalledWith({ ...picked, profile: null });
+  });
+
   it('clears Category, Orientation and Interactable when Kind switches back to Any', async () => {
     const onChange = vi.fn();
     const filters = {

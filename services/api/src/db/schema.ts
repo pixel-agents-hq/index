@@ -96,7 +96,14 @@ export const reportReason = pgEnum('report_reason', [
 
 export const reportStatus = pgEnum('report_status', ['open', 'resolved', 'dismissed']);
 
-export const auditTargetType = pgEnum('audit_target_type', ['layout', 'user', 'report', 'asset', 'apikey']);
+export const auditTargetType = pgEnum('audit_target_type', [
+  'layout',
+  'user',
+  'report',
+  'asset',
+  'apikey',
+  'soundtrack',
+]);
 
 /**
  * #105: `custom_assets` is one polymorphic table for every uploadable kind,
@@ -158,6 +165,10 @@ export const auditAction = pgEnum('audit_action', [
   /** #101: a moderator-issued machine credential for bot-originated asset uploads. */
   'apikey.create',
   'apikey.revoke',
+  /** A soundtrack (an office radio song code) published via POST /api/v1/soundtracks. */
+  'soundtrack.create',
+  /** Owner or moderator, the same soft delete and reason rule as `asset.delete`. */
+  'soundtrack.delete',
 ]);
 
 // ── Tables ────────────────────────────────────────────────────────────────
@@ -520,6 +531,45 @@ export const customAssets = pgTable(
   ],
 );
 
+/**
+ * A soundtrack: one Pixel Agents office radio tune, published to showcase it.
+ *
+ * The radio composes every tune from three numbers (mood, root, seed), and
+ * a **song code** (`TOWN-5-8F3A21C0`) is exactly those, so the code *is*
+ * the tune — there is no audio to store and nothing to import but the text
+ * itself, pasted into the radio's settings (upstream's `music/songCode.ts`).
+ * That is why this is its own small table and not a `custom_assets` kind:
+ * none of that table's sprite/manifest/zip machinery has anything to hold.
+ * `mood` is the code's first part, denormalised for the gallery's filter.
+ */
+export const soundtracks = pgTable(
+  'soundtracks',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    /** Canonical (upper case, the seed as 8 hex digits) — see `soundtracks/songCode.ts`. */
+    code: text('code').notNull(),
+    mood: text('mood').notNull(),
+    /** The publisher's own title; the tune's composed name is derived from the code where it's shown. */
+    title: text('title'),
+    authorUserId: uuid('author_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    /** Null is live, set is gone — owner or moderator, the same rule as `custom_assets.deletedAt`. */
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    check('soundtracks_code_format', sql`${table.code} ~ '^[A-Z]+-[0-9]-[0-9A-F]{8}$'`),
+    // One showcase entry per tune per publisher; a deleted one frees the tune to be published again.
+    uniqueIndex('soundtracks_author_code_key')
+      .on(table.authorUserId, table.code)
+      .where(sql`${table.deletedAt} IS NULL`),
+    index('soundtracks_public_created_idx').on(table.createdAt.desc(), table.id.desc()),
+    index('soundtracks_author_idx').on(table.authorUserId),
+  ],
+);
+
 export const reports = pgTable(
   'reports',
   {
@@ -737,6 +787,7 @@ export type NewUser = typeof users.$inferInsert;
 export type Layout = typeof layouts.$inferSelect;
 export type NewLayout = typeof layouts.$inferInsert;
 export type CustomAsset = typeof customAssets.$inferSelect;
+export type Soundtrack = typeof soundtracks.$inferSelect;
 export type NewCustomAsset = typeof customAssets.$inferInsert;
 export type ApiKey = typeof apiKeys.$inferSelect;
 export type NewApiKey = typeof apiKeys.$inferInsert;

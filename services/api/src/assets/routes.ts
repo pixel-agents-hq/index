@@ -19,6 +19,7 @@ import { PUBLIC_REVALIDATED, respondNotModifiedIfMatching } from '../layouts/cac
 import { authorForLayout, authorsForLayouts } from '../layouts/query.js';
 import { type CharacterFrames, currentCharacterFrames } from './decodeCharacter.js';
 import type { PetFrames } from './decodePet.js';
+import { profileOf } from './decodeProfile.js';
 import { buildAssetsExportZip } from './exportZip.js';
 import type { FlattenedAsset } from './manifest.js';
 import { buildAssetPoses } from './poses.js';
@@ -134,6 +135,7 @@ export function registerAssetRoutes(app: FastifyInstance, { db }: AssetRoutesDep
           ...(orientation && orientation.length > 0 ? { orientation } : {}),
           ...(animation && animation.length > 0 ? { animation } : {}),
           ...(query.interactable !== undefined ? { interactable: query.interactable === 'true' } : {}),
+          ...(query.profile !== undefined ? { profile: query.profile === 'true' } : {}),
         },
       });
 
@@ -264,6 +266,31 @@ export function registerAssetRoutes(app: FastifyInstance, { db }: AssetRoutesDep
         .header('content-type', 'application/zip')
         .header('content-disposition', `attachment; filename="${assetId}.zip"`)
         .send(buffer);
+    },
+  );
+
+  /**
+   * A character profile's config, ready for Pixel Agents' Characters view
+   * "Load config" (`decodeProfile.ts`). 404s for any asset that wasn't
+   * published as a profile. Served for a built-in profile too: unlike a
+   * download zip, a config is a useful starting point to edit even though
+   * every Pixel Agents install already wears it.
+   */
+  typed.get(
+    '/api/v1/assets/:assetId/profile.json',
+    { schema: { params: assetIdParamsSchema } },
+    async (request, reply) => {
+      const { assetId } = request.params;
+      const asset = await getPublicCustomAssetByAssetId(db, assetId);
+      const profile = asset?.assetKind === 'character' ? profileOf(asset.manifest) : null;
+      if (!asset || !profile) throw ApiError.notFound(`No character profile "${assetId}".`);
+
+      reply.header('cache-control', PUBLIC_REVALIDATED);
+      if (respondNotModifiedIfMatching(request, reply, `"${asset.updatedAt.getTime()}"`)) return;
+      return reply
+        .header('content-type', 'application/json; charset=utf-8')
+        .header('content-disposition', `attachment; filename="${assetId}.json"`)
+        .send(JSON.stringify(profile, null, 2));
     },
   );
 

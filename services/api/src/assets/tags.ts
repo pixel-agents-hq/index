@@ -41,6 +41,12 @@ export const ANIMATION_TAGS = ['static', 'animated'] as const;
 export type AnimationTag = (typeof ANIMATION_TAGS)[number];
 
 export const INTERACTABLE_TAG = 'interactable';
+/**
+ * A character published as a Pixel Agents character profile (a wardrobe
+ * config, `decodeProfile.ts`) rather than as a sprite sheet: downloadable as
+ * the config upstream's Characters view loads. Binary, like interactable.
+ */
+export const PROFILE_TAG = 'profile';
 
 const ORIENTATION_SET: ReadonlySet<string> = new Set(FURNITURE_ORIENTATION_TAGS);
 

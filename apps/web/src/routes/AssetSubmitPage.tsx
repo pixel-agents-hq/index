@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 import { ApiError } from '../api/client';
-import { submitAsset } from '../api/manageClient';
+import { submitAsset, submitCharacterProfile } from '../api/manageClient';
 import { useAuth } from '../auth/authState';
 import { SubmissionGate } from '../components/SubmissionGate';
 
@@ -15,7 +15,9 @@ import { SubmissionGate } from '../components/SubmissionGate';
  * No name/category/kind fields (#105 follow-up) — every kind's manifest.json
  * already carries `name` (and furniture's carries `category`), and the
  * server detects `assetKind` from the zip's own contents, so the zip alone
- * is a complete upload.
+ * is a complete upload. A character profile is the Characters view's config
+ * JSON, uploaded as it is; the server composes it with upstream's own
+ * wardrobe renderer.
  */
 export function AssetSubmitPage() {
   const { accessToken } = useAuth();
@@ -30,7 +32,10 @@ export function AssetSubmitPage() {
     setPublishing(true);
     setError(null);
     try {
-      const result = await submitAsset(file, accessToken);
+      const isProfile = file.name.toLowerCase().endsWith('.json') || file.type === 'application/json';
+      const result = isProfile
+        ? await submitCharacterProfile(file, file.name, accessToken)
+        : await submitAsset(file, accessToken);
       void navigate(`/assets/${result.assetId}`);
     } catch (caught) {
       setError(caught instanceof ApiError ? caught : new ApiError(0, 'Something unexpected went wrong.'));
@@ -49,13 +54,20 @@ export function AssetSubmitPage() {
           produce. The kind, name, and (for furniture) category are all read from the
           zip itself, so the zip alone is enough.
         </p>
+        <p className="mt-2 text-sm text-muted">
+          Or a <strong>character profile</strong>: the <code>.json</code> Pixel Agents'
+          Characters view writes with <em>Save config</em>, one character per file. It
+          is drawn here exactly as Pixel Agents draws it, and others can load it back
+          with <em>Load config</em>. No Pixel Agents at hand? <Link to="/assets/design" className="text-accent hover:underline">Design one here</Link>,
+          in the same Characters view.
+        </p>
 
         <div className="mt-6 flex flex-col gap-4">
           <label className="flex flex-col gap-1 text-sm text-muted">
-            Asset zip
+            Asset zip or character config
             <input
               type="file"
-              accept="application/zip,.zip"
+              accept="application/zip,.zip,application/json,.json"
               onChange={(event) => setFile(event.target.files?.[0] ?? null)}
               className="text-xs text-muted"
             />

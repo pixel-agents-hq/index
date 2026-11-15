@@ -26,6 +26,12 @@ export interface AssetFilters {
   orientation: string[];
   animation: string[];
   interactable: boolean | null;
+  /**
+   * Characters published as a Pixel Agents character profile (true) — the
+   * filter bar offers it as its own Kind, "Character profile", which also
+   * sets `assetKind: 'character'`.
+   */
+  profile: boolean | null;
 }
 
 export const DEFAULT_ASSET_FILTERS: AssetFilters = {
@@ -37,6 +43,7 @@ export const DEFAULT_ASSET_FILTERS: AssetFilters = {
   orientation: [],
   animation: [],
   interactable: null,
+  profile: null,
 };
 
 function asAssetKind(value: string | null): 'furniture' | 'character' | 'pet' | null {
@@ -56,7 +63,7 @@ function splitCsv(value: string | null): string[] {
     : [];
 }
 
-function asInteractable(value: string | null): boolean | null {
+function asBoolean(value: string | null): boolean | null {
   return value === 'true' ? true : value === 'false' ? false : null;
 }
 
@@ -69,7 +76,8 @@ export function assetFiltersFromSearchParams(params: URLSearchParams): AssetFilt
     authorLabel: params.get('authorLabel'),
     orientation: splitCsv(params.get('orientation')),
     animation: splitCsv(params.get('animation')),
-    interactable: asInteractable(params.get('interactable')),
+    interactable: asBoolean(params.get('interactable')),
+    profile: asBoolean(params.get('profile')),
   };
 }
 
@@ -83,6 +91,7 @@ export function assetFiltersToSearchParams(filters: AssetFilters): URLSearchPara
   if (filters.orientation.length > 0) params.set('orientation', filters.orientation.join(','));
   if (filters.animation.length > 0) params.set('animation', filters.animation.join(','));
   if (filters.interactable !== null) params.set('interactable', String(filters.interactable));
+  if (filters.profile !== null) params.set('profile', String(filters.profile));
   return params;
 }
 
@@ -95,6 +104,7 @@ export function assetFiltersToApiParams(filters: AssetFilters): ListAssetsParams
     ...(filters.orientation.length > 0 ? { orientation: filters.orientation } : {}),
     ...(filters.animation.length > 0 ? { animation: filters.animation } : {}),
     ...(filters.interactable !== null ? { interactable: filters.interactable } : {}),
+    ...(filters.profile !== null ? { profile: filters.profile } : {}),
   };
 }
 
@@ -106,6 +116,7 @@ export function isDefaultAssetFilters(filters: AssetFilters): boolean {
     filters.author === null &&
     filters.orientation.length === 0 &&
     filters.animation.length === 0 &&
-    filters.interactable === null
+    filters.interactable === null &&
+    filters.profile === null
   );
 }

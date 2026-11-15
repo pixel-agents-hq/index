@@ -63,7 +63,10 @@ export function AssetFilterBar({
   const furnitureOnlyControlsApply = filters.assetKind !== 'pet' && filters.assetKind !== 'character';
 
   function handleAssetKindChange(value: string) {
-    const assetKind = (value || null) as AssetFilters['assetKind'];
+    // 'profile' is a Kind of its own in this select: characters published as
+    // a Pixel Agents character profile.
+    const profile = value === 'profile' ? true : null;
+    const assetKind = (profile ? 'character' : value || null) as AssetFilters['assetKind'];
     // Not just pet/character: picking a category or orientation auto-selects
     // 'furniture' (below), so stepping back to 'Any' has to be the exact
     // reverse of that — otherwise Kind reads "Any" while the result set stays
@@ -72,6 +75,7 @@ export function AssetFilterBar({
     onChange({
       ...filters,
       assetKind,
+      profile,
       ...(clearFurnitureOnly ? { category: null, orientation: [], interactable: null } : {}),
     });
   }
@@ -100,13 +104,14 @@ export function AssetFilterBar({
         <label className="flex items-center gap-1.5 text-sm text-muted">
           Kind
           <select
-            value={filters.assetKind ?? ''}
+            value={filters.profile ? 'profile' : (filters.assetKind ?? '')}
             onChange={(event) => handleAssetKindChange(event.target.value)}
             className={selectClass}
           >
             <option value="">Any</option>
             <option value="furniture">Furniture</option>
             <option value="character">Character</option>
+            <option value="profile">Character profile</option>
             <option value="pet">Pet</option>
           </select>
         </label>

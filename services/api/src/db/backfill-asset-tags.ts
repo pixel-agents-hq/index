@@ -18,8 +18,9 @@ import { fileURLToPath } from 'node:url';
 
 import { eq } from 'drizzle-orm';
 
+import { profileOf } from '../assets/decodeProfile.js';
 import type { FlattenedAsset } from '../assets/manifest.js';
-import { facingAssetTags, furnitureTags } from '../assets/tags.js';
+import { facingAssetTags, furnitureTags, PROFILE_TAG } from '../assets/tags.js';
 import { type AnyDatabase, createDatabase } from './client.js';
 import * as schema from './schema.js';
 
@@ -36,8 +37,12 @@ export async function backfillAssetTags(db: AnyDatabase): Promise<number> {
 
   let updated = 0;
   for (const row of rows) {
+    // A character published as a profile keeps its `profile` tag: the
+    // profile in its manifest is what the tag says (decodeProfile.ts).
     const tags =
-      row.assetKind === 'furniture' ? furnitureTags(row.manifest as FlattenedAsset[]) : facingAssetTags();
+      row.assetKind === 'furniture'
+        ? furnitureTags(row.manifest as FlattenedAsset[])
+        : [...facingAssetTags(), ...(profileOf(row.manifest) ? [PROFILE_TAG] : [])];
     if (sameTags(tags, row.tags)) continue;
     await db.update(schema.customAssets).set({ tags }).where(eq(schema.customAssets.id, row.id));
     updated += 1;

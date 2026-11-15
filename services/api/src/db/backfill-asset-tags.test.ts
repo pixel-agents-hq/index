@@ -127,6 +127,33 @@ describe('backfillAssetTags', () => {
     expect(row?.tags).toEqual(['animated']);
   });
 
+  it('keeps a character profile tagged profile, and gives it back to one that lost it', async () => {
+    const profile = { v: 35, id: 'char-0', name: 'Suit', body: 'flat' };
+    const kept = await insertAsset({
+      assetKind: 'character',
+      assetId: 'SUIT',
+      requestedAssetId: 'SUIT',
+      category: null,
+      manifest: [{ id: 'SUIT', name: 'Suit', label: 'Suit', width: 128, height: 96, profile }],
+      tags: ['animated', 'profile'],
+    });
+    // What an earlier backfill (one that didn't know profiles) left behind.
+    const stripped = await insertAsset({
+      assetKind: 'character',
+      assetId: 'DRESS',
+      requestedAssetId: 'DRESS',
+      category: null,
+      manifest: [{ id: 'DRESS', name: 'Dress', label: 'Dress', width: 128, height: 96, profile }],
+      tags: ['animated'],
+    });
+
+    expect(await backfillAssetTags(db())).toBe(1);
+    for (const id of [kept.id, stripped.id]) {
+      const [row] = await db().select().from(schema.customAssets).where(eq(schema.customAssets.id, id));
+      expect(row?.tags).toEqual(['animated', 'profile']);
+    }
+  });
+
   it('is idempotent — a second pass touches nothing once tags are correct', async () => {
     await insertAsset();
     await backfillAssetTags(db());

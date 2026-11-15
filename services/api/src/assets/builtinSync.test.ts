@@ -9,7 +9,7 @@ import { PIXEL_AGENTS_SYSTEM_USER_ID } from '../db/constants.js';
 import * as schema from '../db/schema.js';
 import { createTestDatabase, type Harness } from '../db/test-support/harness.js';
 import { tinyPng } from '../test-support/assetZip.js';
-import { syncBuiltinAssets } from './builtinSync.js';
+import { type BuiltinProfile, syncBuiltinAssets } from './builtinSync.js';
 import { CHARACTER_HEIGHT, CHARACTER_WIDTH } from './decodeCharacter.js';
 import { PET_HEIGHT, PET_WIDTH } from './decodePet.js';
 
@@ -20,7 +20,6 @@ const COMMIT_B = 'b'.repeat(40);
 function writeFixtureVendor(opts: {
   commit?: string;
   furniture?: { id: string; category?: string }[];
-  characterIndices?: number[];
   pets?: { id: string; name: string }[];
 }): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pixel-index-builtin-sync-test-'));
@@ -56,14 +55,6 @@ function writeFixtureVendor(opts: {
         }),
       );
       fs.writeFileSync(path.join(dir, `${item.id}.png`), tinyPng(16, 16));
-    }
-  }
-
-  if (opts.characterIndices?.length) {
-    const charactersDir = path.join(assetsDir, 'characters');
-    fs.mkdirSync(charactersDir, { recursive: true });
-    for (const n of opts.characterIndices) {
-      fs.writeFileSync(path.join(charactersDir, `char_${n}.png`), tinyPng(CHARACTER_WIDTH, CHARACTER_HEIGHT));
     }
   }
 
@@ -110,16 +101,42 @@ async function builtinRows() {
     .orderBy(schema.customAssets.assetId);
 }
 
+function fixtureProfile(id: string, name: string): BuiltinProfile {
+  return {
+    profile: { id, name, body: 'flat', v: 35 },
+    sheetPng: tinyPng(CHARACTER_WIDTH, CHARACTER_HEIGHT).toString('base64'),
+  };
+}
+
 describe('syncBuiltinAssets', () => {
+  it('publishes the pinned upstream’s default cast (builtinProfiles.json) as built-in character profiles', async () => {
+    const upstreamDir = vendor({ commit: COMMIT_A });
+    const result = await syncBuiltinAssets(db(), upstreamDir);
+    expect(result.count).toBe(6);
+    const rows = await builtinRows();
+    expect(rows.map((r) => r.assetId)).toEqual(['CHAR_0', 'CHAR_1', 'CHAR_2', 'CHAR_3', 'CHAR_4', 'CHAR_5']);
+    for (const row of rows) {
+      expect(row.assetKind).toBe('character');
+      expect(row.tags).toEqual(['animated', 'profile']);
+      const frames = (row.sprites as Record<string, { down: unknown[] }>)[row.assetId];
+      expect(frames?.down).toHaveLength(8);
+    }
+    expect(rows[0]?.name).toBe('Suit');
+    // Read back out of jsonb (keys reordered), they still count as the same profiles: no resync loop.
+    expect(await syncBuiltinAssets(db(), upstreamDir)).toEqual({ synced: false, count: 0, commit: COMMIT_A });
+  });
+
   it('populates furniture, character, and pet rows on a fresh install', async () => {
     const upstreamDir = vendor({
       commit: COMMIT_A,
       furniture: [{ id: 'CHAIR' }],
-      characterIndices: [0, 1],
       pets: [{ id: 'gitcat', name: 'Gitcat' }],
     });
 
-    const result = await syncBuiltinAssets(db(), upstreamDir);
+    const result = await syncBuiltinAssets(db(), upstreamDir, [
+      fixtureProfile('char-0', 'Suit'),
+      fixtureProfile('char-1', 'Dress'),
+    ]);
     expect(result).toEqual({ synced: true, count: 4, commit: COMMIT_A });
 
     const rows = await builtinRows();
@@ -129,6 +146,11 @@ describe('syncBuiltinAssets', () => {
       expect(row.sourceCommit).toBe(COMMIT_A);
       expect(row.authorUserId).toBe(PIXEL_AGENTS_SYSTEM_USER_ID);
     }
+    // A default character profile keeps the id its bundled char_N.png had.
+    const suit = rows.find((r) => r.assetId === 'CHAR_0');
+    expect(suit?.name).toBe('Suit');
+    expect(suit?.tags).toContain('profile');
+    expect((suit?.manifest as { profile: unknown }[])[0]?.profile).toEqual(fixtureProfile('char-0', 'Suit').profile);
     // Pet id upper-cased for storage; display name keeps its original casing.
     expect(rows.find((r) => r.assetId === 'GITCAT')?.name).toBe('Gitcat');
     // The fixture's flat furniture manifest has no `file` field (matching the
@@ -141,19 +163,32 @@ describe('syncBuiltinAssets', () => {
 
   it('re-running with an unchanged pin no-ops', async () => {
     const upstreamDir = vendor({ commit: COMMIT_A, furniture: [{ id: 'CHAIR' }] });
-    await syncBuiltinAssets(db(), upstreamDir);
+    await syncBuiltinAssets(db(), upstreamDir, []);
     const before = await builtinRows();
 
-    const result = await syncBuiltinAssets(db(), upstreamDir);
+    const result = await syncBuiltinAssets(db(), upstreamDir, []);
     expect(result).toEqual({ synced: false, count: 0, commit: COMMIT_A });
 
     const after = await builtinRows();
     expect(after).toEqual(before);
   });
 
+  it('resyncs at an unchanged pin when the built-in profiles changed (a database synced before they existed)', async () => {
+    const upstreamDir = vendor({ commit: COMMIT_A, furniture: [{ id: 'CHAIR' }] });
+    await syncBuiltinAssets(db(), upstreamDir, []);
+
+    const result = await syncBuiltinAssets(db(), upstreamDir, [fixtureProfile('char-0', 'Suit')]);
+    expect(result).toEqual({ synced: true, count: 2, commit: COMMIT_A });
+    expect((await builtinRows()).map((r) => r.assetId)).toEqual(['CHAIR', 'CHAR_0']);
+
+    // And then it is settled again.
+    const again = await syncBuiltinAssets(db(), upstreamDir, [fixtureProfile('char-0', 'Suit')]);
+    expect(again).toEqual({ synced: false, count: 0, commit: COMMIT_A });
+  });
+
   it('a changed pin resyncs, dropping stale builtin rows and leaving custom rows untouched', async () => {
     const upstreamA = vendor({ commit: COMMIT_A, furniture: [{ id: 'CHAIR' }] });
-    await syncBuiltinAssets(db(), upstreamA);
+    await syncBuiltinAssets(db(), upstreamA, []);
 
     const [customRow] = await db()
       .insert(schema.customAssets)
@@ -187,7 +222,7 @@ describe('syncBuiltinAssets', () => {
       .returning();
 
     const upstreamB = vendor({ commit: COMMIT_B, furniture: [{ id: 'TABLE' }] });
-    const result = await syncBuiltinAssets(db(), upstreamB);
+    const result = await syncBuiltinAssets(db(), upstreamB, []);
     expect(result).toEqual({ synced: true, count: 1, commit: COMMIT_B });
 
     const rows = await builtinRows();
@@ -233,7 +268,7 @@ describe('syncBuiltinAssets', () => {
       });
 
     const upstreamDir = vendor({ commit: COMMIT_A, furniture: [{ id: 'CHAIR' }] });
-    await syncBuiltinAssets(db(), upstreamDir);
+    await syncBuiltinAssets(db(), upstreamDir, []);
 
     const rows = await builtinRows();
     expect(rows).toHaveLength(1);
@@ -245,11 +280,11 @@ describe('syncBuiltinAssets', () => {
 
   it('is a safe no-op, deleting nothing, when the pinned commit cannot be resolved', async () => {
     const upstreamDir = vendor({ commit: COMMIT_A, furniture: [{ id: 'CHAIR' }] });
-    await syncBuiltinAssets(db(), upstreamDir);
+    await syncBuiltinAssets(db(), upstreamDir, []);
 
     // A vendor tree with no .commit stamp and no real git — upstreamPin() has nothing to resolve.
     const unpinnedDir = vendor({ furniture: [{ id: 'TABLE' }] });
-    const result = await syncBuiltinAssets(db(), unpinnedDir);
+    const result = await syncBuiltinAssets(db(), unpinnedDir, []);
     expect(result).toEqual({ synced: false, count: 0, commit: null });
 
     const rows = await builtinRows();

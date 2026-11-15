@@ -663,6 +663,77 @@ describe('custom characters (#105)', () => {
   );
 });
 
+describe('POST /compose-character', () => {
+  const SUIT = {
+    name: 'Suit',
+    body: 'flat',
+    eyeShape: 'plain',
+    under: 'basic',
+    hair: 'mop',
+    pants: 'shorts',
+    shoes: 'boots',
+    full: 'business_suit',
+    v: 35,
+  };
+
+  async function compose(payload: Record<string, unknown>) {
+    const config = loadConfig();
+    const app = await buildServer({ config, renderer: activeRenderer(), cache: new PreviewCache(config.cacheDir, 0) });
+    try {
+      const response = await app.inject({ method: 'POST', url: '/compose-character', payload });
+      return { status: response.statusCode, body: response.json<Record<string, unknown>>() };
+    } finally {
+      await app.close();
+    }
+  }
+
+  it(
+    'composes a profile with upstream’s own wardrobe renderer into 8-frame office sprites',
+    async () => {
+      const { status, body } = await compose({ config: JSON.stringify(SUIT), fileName: 'suit.json' });
+      expect(status).toBe(200);
+      const sprites = body.sprites as { down: string[][][]; up: string[][][]; right: string[][][] };
+      for (const dir of ['down', 'up', 'right'] as const) {
+        expect(sprites[dir]).toHaveLength(8);
+        expect(sprites[dir][0]).toHaveLength(32);
+        expect(sprites[dir][0]?.[0]).toHaveLength(16);
+      }
+      // Actually drawn, not an empty sheet: a body, clothes and hair.
+      expect(sprites.down[0]?.flat().filter(Boolean).length).toBeGreaterThan(200);
+      expect(body.profile).toMatchObject({ name: 'Suit', body: 'flat', v: 35 });
+    },
+    RENDER_TIMEOUT,
+  );
+
+  it(
+    'migrates an older profile the way upstream reads it, and names an unnamed one after its file',
+    async () => {
+      const { name: _name, v: _v, ...unnamed } = SUIT;
+      const { status, body } = await compose({ config: JSON.stringify({ ...unnamed, v: 34 }), fileName: 'Office Hero.json' });
+      expect(status).toBe(200);
+      expect(body.profile).toMatchObject({ name: 'Office Hero', v: 35 });
+    },
+    RENDER_TIMEOUT,
+  );
+
+  it(
+    'refuses what upstream’s Load config refuses, and a roster of several',
+    async () => {
+      const notJson = await compose({ config: '{', fileName: 'x.json' });
+      expect(notJson.status).toBe(422);
+      expect(notJson.body.error).toBe('invalid_profile');
+      const unknownBody = await compose({ config: JSON.stringify({ ...SUIT, body: 'no-such-body' }), fileName: 'x.json' });
+      expect(unknownBody.status).toBe(422);
+      const roster = await compose({ config: JSON.stringify({ roster: [SUIT, SUIT] }), fileName: 'x.json' });
+      expect(roster.status).toBe(422);
+      expect(String(roster.body.message)).toContain('One character per upload');
+      const missing = await compose({});
+      expect(missing.status).toBe(400);
+    },
+    RENDER_TIMEOUT,
+  );
+});
+
 describe('custom pets (#105)', () => {
   function petFrames16x32(count: number): string[][][] {
     return Array.from({ length: count }, () => Array.from({ length: 32 }, () => Array.from({ length: 16 }, () => '#ff8800')));

@@ -130,6 +130,28 @@ export function AssetDetailPage() {
             Download
           </a>
         )}
+        {/*
+          A character profile's config, ready for Pixel Agents' Characters view
+          "Load config" — offered for built-in profiles too: a config is a
+          starting point to edit, not a copy of something already installed.
+        */}
+        {asset.tags.includes('profile') && (
+          <a
+            href={apiUrl(`/api/v1/assets/${asset.assetId}/profile.json`)}
+            download={`${asset.assetId}.json`}
+            className="border-2 border-border px-3 py-1.5 text-sm text-ink hover:border-accent"
+          >
+            Download config
+          </a>
+        )}
+        {asset.tags.includes('profile') && (
+          <Link
+            to={`/assets/design?from=${asset.assetId}`}
+            className="border-2 border-border px-3 py-1.5 text-sm text-ink hover:border-accent"
+          >
+            Remix in the designer
+          </Link>
+        )}
         {canDelete && (
           <button
             type="button"
@@ -142,6 +164,13 @@ export function AssetDetailPage() {
         )}
       </p>
       {deleteError && <ErrorNotice error={deleteError} />}
+      {asset.tags.includes('profile') && (
+        <p className="mt-2 text-sm text-muted">
+          A Pixel Agents character profile: in Pixel Agents, open <em>Characters</em> and
+          use <em>Load config</em> with the downloaded <code>.json</code> to add it to your cast —
+          or remix a copy right here in the designer.
+        </p>
+      )}
 
       <div className="mt-4 inline-block border-2 border-border bg-canvas p-4">
         <AssetPreview

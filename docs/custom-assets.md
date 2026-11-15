@@ -378,6 +378,103 @@ Resolved during implementation:
 2. `sync-builtin-assets.ts` runs as its own `docker-entrypoint.sh` step, after
    `seed.js` — consistent with every other idempotent boot task there.
 
+## Character profiles and soundtracks
+
+Pixel Agents' cast is no longer a set of bundled `char_N.png` sprite sheets. Each
+character is a **profile**: a wardrobe part per slot, colours and pixel edits, which
+the webview composes into a sheet (`webview-ui/src/characters/`). The Characters view
+saves one with *Save config* (a `.json`) and reads one back with *Load config*. The
+office also has a **radio** whose every tune is fully determined by a **song code**
+(`TOWN-5-8F3A21C0`: mood, root, seed — `webview-ui/src/music/songCode.ts`). Both are
+things people make and want to show off, so the index lets them publish their
+favourites.
+
+### Character profiles: a `character` asset tagged `profile`
+
+A profile *is* importable (the `.json` that *Load config* takes), so it lives in
+`custom_assets`, as an ordinary `character` row with two additions:
+`manifest[0].profile` holds the profile itself, and the row is tagged `profile`
+(`assets/tags.ts`, filterable as `GET /api/v1/assets?profile=true`; the gallery's
+Kind filter calls it "Character profile"). Its `sprites` are the composed office
+sprites, the same shape a sprite-sheet character stores, so every reader of character
+rows works on it unchanged: the gallery thumbnail and poses, the single-asset editor,
+layout renders and the export zip.
+
+- **Upload** — `POST /api/v1/assets` with `content-type: application/json` and the
+  config file as the body (`?fileName=` names an unnamed profile the way *Load config*
+  does). One character per upload; a roster is refused. `assets/decodeProfile.ts`.
+- **Composition happens in the renderer, with upstream's own code.** The API can't run
+  vendor TypeScript, and a hand-kept copy of the wardrobe and its renderer would drift
+  with every art change. The renderer service already runs the pinned upstream's dev
+  server in Chromium, so `POST /compose-character` imports upstream's
+  `characters/profiles.ts` (`parseConfigFile`: the exact validation, migration and
+  naming *Load config* runs), `loadWardrobe.ts` and `renderer.ts` into a page and
+  composes the sheet there. What the index accepts and draws is what Pixel Agents
+  would.
+- **Download** — `GET /api/v1/assets/:assetId/profile.json` (the "Download config"
+  button, offered for built-in profiles too). The export zip writes
+  `character-profiles/<assetId>.json` beside the `char_N.png` sheet, which still works
+  as an external character as it is.
+- **Built-ins** — the six built-in characters are upstream's
+  `DEFAULT_CHARACTER_PROFILES`, published as built-in profiles under the ids the
+  bundled sheets had (`CHAR_0`…`CHAR_5`). The API image carries no vendor TypeScript,
+  so `services/api/src/assets/builtinProfiles.json` (each profile plus its composed
+  sheet) is generated with upstream's renderer by `npm run builtin-profiles`
+  (`apps/web/build/generateBuiltinProfiles.ts`); CI's `builtin-profiles:check` fails a
+  vendor bump that changes the default cast or its art until it is regenerated.
+
+### The character designer: Pixel Agents' own Characters view, in the index
+
+`/assets/design` lets a user design a character without leaving the index (or having
+Pixel Agents installed). Upstream's Characters view runs **unmodified** in the
+`character-designer.html` frame (`apps/web/src/live-office/DesignerApp.tsx`), the same
+way the layout editor runs upstream's editor in `live-office.html`:
+
+- The view edits upstream's `castStore`, which saves the whole cast over the transport
+  and waits for the server's answer. The index's transport stub
+  (`live-office/transport.ts`, inert for every other frame) hands that one message to
+  the designer, which plays the server: the cast is kept in this browser's
+  `localStorage` and the save is answered at once, so Save, undo and the dirty-close
+  prompt all behave as in Pixel Agents. A fresh browser starts from upstream's six
+  default characters.
+- The page around the frame (`routes/CharacterDesignerPage.tsx`,
+  `live-office/designerProtocol.ts`) shows **Publish "‹name›"** for the character on the
+  stage (unsaved edits included) and uploads it exactly like a config file chosen on
+  `/assets/submit`. `?from=<assetId>` (a profile's **Remix in the designer** button)
+  opens a copy of a published profile under a fresh id.
+- A character wearing a **custom item** (a part saved from the pixel editor) can't be
+  published as it looks: a character config doesn't carry custom items — upstream's own
+  *Save config* doesn't either — so the page says so and disables Publish.
+
+### Soundtracks: their own table
+
+A song code is the whole tune: there is no audio, no sprite and no file to import, only
+the text to paste into the radio's settings. None of `custom_assets`'
+manifest/sprite/zip machinery has anything to hold, so soundtracks are a small table of
+their own (`soundtracks`: canonical code, mood, optional title, author, soft delete),
+with `GET/POST /api/v1/soundtracks`, `GET/DELETE /api/v1/soundtracks/:id`
+(`services/api/src/soundtracks/`). The code is validated and canonicalised by a
+hand-kept copy of upstream's `parseSongCode` (`songCode.ts`), checked against
+upstream's own parser by `songCode.test.ts`. One entry per tune per publisher.
+
+`/soundtracks` shows each code with a one-click **Copy**, and **Play** hears it on
+**Pixel Agents' own radio player, unmodified** (`music/MusicPlayer.tsx`: play, skip,
+volume, the visualizer and its settings panel with the moods and the song code to copy
+or paste and play), in the `radio.html` frame (`live-office/RadioApp.tsx`,
+`radioProtocol.ts`) pinned to the page's bottom-right corner as it sits in the office.
+It's a frame because vendor code only compiles in `src/live-office` and upstream's
+Tailwind theme redefines the site's tokens. It's transparent and sized to the player as
+the frame reports it (the settings panel opens above the bar), so the page stays
+clickable around it. Browsers start audio only from a click inside the playing document,
+so when a page-side Play is refused the player's own ▶ always works. The player's
+*Hide player* points at Pixel Agents' Settings, which the index doesn't have, so the page
+shows **Show the radio** while it's hidden, and playing a soundtrack brings it back.
+
+The publish form also lets anyone **try a code before publishing**: as it's typed, the
+frame checks it with upstream's parser and names it with upstream's composer, and
+**Try it** plays it on that same player. A code the radio can't play is flagged and
+can't be published. Author pages list a publisher's soundtracks beside their assets.
+
 ## See also
 
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — the four-service shape this feature slots

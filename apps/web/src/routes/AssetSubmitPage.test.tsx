@@ -39,14 +39,17 @@ const META_RESPONSE = {
   discordInviteUrl: null as string | null,
 };
 
-function stubFetch(handleOther: (url: string) => Response, authResponse: unknown = AUTH_RESPONSE) {
+function stubFetch(
+  handleOther: (url: string, init?: RequestInit) => Response,
+  authResponse: unknown = AUTH_RESPONSE,
+) {
   vi.stubGlobal(
     'fetch',
-    vi.fn(async (input: RequestInfo | URL) => {
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = requestUrl(input);
       if (url.includes('/auth/token')) return Response.json(authResponse);
       if (url.includes('/meta')) return Response.json(META_RESPONSE);
-      return handleOther(url);
+      return handleOther(url, init);
     }),
   );
 }
@@ -68,9 +71,8 @@ async function waitForAuthReady() {
   await screen.findByRole('button', { name: 'Publish' });
 }
 
-function chooseFile() {
-  const file = new File([new Blob([new Uint8Array([1, 2, 3])])], 'asset.zip', { type: 'application/zip' });
-  const input = screen.getByLabelText('Asset zip');
+function chooseFile(file = new File([new Blob([new Uint8Array([1, 2, 3])])], 'asset.zip', { type: 'application/zip' })) {
+  const input = screen.getByLabelText('Asset zip or character config');
   fireEvent.change(input, { target: { files: [file] } });
 }
 
@@ -146,5 +148,34 @@ describe('AssetSubmitPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
 
     expect(await screen.findByText(/id must start with an uppercase letter\./, { exact: false })).toBeInTheDocument();
+  });
+
+  it('uploads a character config (.json) as the config itself, with its file name', async () => {
+    const uploads: { url: string; contentType: string | undefined }[] = [];
+    stubFetch((url, init) => {
+      uploads.push({ url, contentType: (init?.headers as Record<string, string> | undefined)?.['content-type'] });
+      return Response.json({
+        assetId: 'NIGHT_OWL',
+        name: 'Night Owl',
+        category: null,
+        author: { discordId: '1', username: 'someone', displayName: 'someone', avatarUrl: null },
+        tags: ['animated', 'profile'],
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        files: { sprite: '/api/v1/assets/NIGHT_OWL/sprite.png' },
+        manifest: [{ id: 'NIGHT_OWL' }],
+      });
+    });
+    renderSubmit();
+    await waitForAuthReady();
+
+    chooseFile(new File(['{"name":"Night Owl","body":"flat"}'], 'Night Owl.json', { type: 'application/json' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Publish' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+
+    await waitFor(() => expect(screen.getByText('landed on asset detail page')).toBeInTheDocument());
+    expect(uploads).toEqual([
+      { url: expect.stringContaining('/api/v1/assets?fileName=Night+Owl.json') as string, contentType: 'application/json' },
+    ]);
   });
 });
