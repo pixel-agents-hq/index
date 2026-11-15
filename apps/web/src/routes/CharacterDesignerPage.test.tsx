@@ -237,5 +237,34 @@ describe('CharacterDesignerPage', () => {
       fireEvent.click(screen.getByLabelText('Transparent avatar'));
       expect(screen.getByTestId('seed-code')).toHaveTextContent(`px.E${OCTOCAT.slice(4)}`);
     });
+
+    it.each(['/assets/design', '/assets/design?from=NIGHT_OWL'])(
+      'copies a link that restores the current stage from %s',
+      async (entry) => {
+        stubApi();
+        const writeText = vi.fn().mockResolvedValue(undefined);
+        Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+        const page = renderPage(entry);
+        const { say } = designerFrame();
+        await screen.findByRole('region', { name: 'Seed' });
+        if (entry.includes('from=')) {
+          say({ channel: DESIGNER_CHANNEL, type: 'selection', profile: REMIX, customItems: [] });
+        }
+        // The second selection represents an unsaved edit to the remixed profile.
+        say({ channel: DESIGNER_CHANNEL, type: 'selection', profile: profileFromText('octocat'), customItems: [] });
+        fireEvent.click(screen.getByRole('button', { name: 'Copy link' }));
+        await waitFor(() => expect(writeText).toHaveBeenCalledOnce());
+        const copied = new URL(String(writeText.mock.calls[0]?.[0]));
+        expect(copied.searchParams.get('seed')).toBe(OCTOCAT);
+        expect(copied.searchParams.has('from')).toBe(false);
+        expect(copied.hash).toBe('');
+
+        page.unmount();
+        renderPage(`/assets/design${copied.search}`);
+        const restored = designerFrame();
+        restored.say({ channel: DESIGNER_CHANNEL, type: 'ready' });
+        await waitFor(() => expect(restored.postMessage).toHaveBeenCalledWith(wearOf('octocat'), window.location.origin));
+      },
+    );
   });
 });

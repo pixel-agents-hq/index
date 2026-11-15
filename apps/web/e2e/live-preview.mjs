@@ -434,6 +434,34 @@ async function assertEditorRoundTrip(page) {
   );
 }
 
+async function assertDesignerSeedLink(page, context) {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: WEB_ORIGIN });
+  await page.goto(`${WEB_ORIGIN}${BASE_PATH}assets/design`, { waitUntil: 'networkidle' });
+  await page.getByTitle('Character designer').waitFor();
+  const code = page.getByTestId('seed-code');
+  await code.waitFor();
+  const original = await code.textContent();
+  assert(original?.startsWith('px.'), 'The designer did not show a seed code.');
+  await page.getByRole('button', { name: 'Copy link' }).click();
+  const link = await page.evaluate(() => navigator.clipboard.readText());
+  assert.equal(new URL(link).searchParams.get('seed'), original);
+  await page.goto(link, { waitUntil: 'networkidle' });
+  await page.waitForFunction((seed) => document.querySelector('[data-testid="seed-code"]')?.textContent === seed, original);
+
+  await page.getByRole('button', { name: 'Text', exact: true }).click();
+  await page.getByLabel('Free-text seed').fill('octocat');
+  await page.waitForFunction((seed) => {
+    const current = document.querySelector('[data-testid="seed-code"]')?.textContent;
+    return current && current !== seed;
+  }, original);
+  const edited = await code.textContent();
+  await page.getByRole('button', { name: 'Copy link' }).click();
+  const editedLink = await page.evaluate(() => navigator.clipboard.readText());
+  assert.equal(new URL(editedLink).searchParams.get('seed'), edited);
+  await page.goto(editedLink, { waitUntil: 'networkidle' });
+  await page.waitForFunction((seed) => document.querySelector('[data-testid="seed-code"]')?.textContent === seed, edited);
+}
+
 async function run() {
   const { layout, source } = pinnedDefaultLayout();
   await runBuild();
@@ -495,6 +523,7 @@ async function run() {
     await page.getByText('3 mock agents', { exact: true }).waitFor();
     await assertRenderedOffice(frame, 3);
 
+
     await page.getByRole('button', { name: 'Thumbnail' }).click();
     await page
       .getByAltText('Pinned Default Office office layout thumbnail')
@@ -519,6 +548,8 @@ async function run() {
     frame = await getLiveFrame(page);
     await assertRenderedOffice(frame, 3);
 
+    await assertDesignerSeedLink(page, context);
+
     // Last, deliberately: this is the step that logs in, and the checks above
     // are all about what an anonymous visitor sees.
     await assertEditorRoundTrip(page);
@@ -532,6 +563,7 @@ async function run() {
       '✓ live preview rendered the pinned layout and passed browser interactions',
     );
     console.log('✓ the editor drew a publishable layout and handed it to /submit');
+    console.log('✓ the designer copied and restored the initial and edited seed links');
   } catch (error) {
     if (page) {
       fs.mkdirSync(path.dirname(SCREENSHOT), { recursive: true });
