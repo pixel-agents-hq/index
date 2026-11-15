@@ -150,6 +150,13 @@ export interface ApiConfig {
    */
   exportRateLimit: RateLimitBucket;
   /**
+   * Its own bucket for `GET /api/v1/avatars/:seed.png` (#133). Every miss is a
+   * render on the event loop, so it does not share the general budget, but an
+   * avatar is small and a page shows several, so it is looser than the write
+   * bucket.
+   */
+  avatarRateLimit: RateLimitBucket;
+  /**
    * The one route whose body is deliberately allowed to exceed
    * `bodyLimitBytes` (#63): `POST /api/v1/admin/backup/import` accepts a zip
    * of potentially hundreds of layouts, not one. Enforced as that route's own
@@ -593,6 +600,10 @@ export function loadConfig(): ApiConfig {
     exportRateLimit: {
       max: intFromEnv('RATE_LIMIT_EXPORT_MAX', 6, problems),
       windowMs: intFromEnv('RATE_LIMIT_EXPORT_WINDOW_MS', 60_000, problems),
+    },
+    avatarRateLimit: {
+      max: intFromEnv('RATE_LIMIT_AVATAR_MAX', 120, problems),
+      windowMs: intFromEnv('RATE_LIMIT_AVATAR_WINDOW_MS', 60_000, problems),
     },
     // 50 MB comfortably fits a full backup zip at today's scale (a few
     // thousand layouts well under `maxLayoutBytes` each, plus small meta.json

@@ -28,6 +28,7 @@ export function testConfig(overrides: Partial<ApiConfig> = {}): ApiConfig {
     rateLimit: { max: 100, windowMs: 60_000 },
     writeRateLimit: { max: 2, windowMs: 60_000 },
     exportRateLimit: { max: 100, windowMs: 60_000 },
+    avatarRateLimit: { max: 100, windowMs: 60_000 },
     maxImportBytes: 50_000_000,
     ...overrides,
   };

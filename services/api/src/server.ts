@@ -24,6 +24,8 @@ import { registerAssetSubmitRoutes } from './assets/submit.js';
 import { registerAuthContext } from './auth/context.js';
 import { registerAuthRoutes } from './auth/routes.js';
 import { registerAuthorRoutes } from './authors/routes.js';
+import { MAX_SEED_CODE_LENGTH, redactAvatarUrl } from './avatars/render.js';
+import { registerAvatarRoutes } from './avatars/routes.js';
 import { registerBackupExportRoutes } from './backup/export.js';
 import { registerBackupImportRoutes } from './backup/import.js';
 import { allowsWebOrigin, type ApiConfig } from './config.js';
@@ -80,7 +82,28 @@ export async function buildServer({ config, pool, db }: BuildServerDeps): Promis
     // The reverse proxy (Traefik, Cloudflare Tunnel) sets X-Forwarded-For.
     // Without this, every client shares the proxy's IP and one bucket.
     trustProxy: config.trustProxy,
-    logger: { level: config.logLevel },
+    logger: {
+      level: config.logLevel,
+      serializers: {
+        // Fastify's own request serializer, but with redactAvatarUrl() over the
+        // URL: a free-text avatar seed may be an email address (#133).
+        req: (request) => ({
+          method: request.method,
+          url: redactAvatarUrl(request.url),
+          host: request.host,
+          remoteAddress: request.ip,
+          ...(request.socket.remotePort === undefined ? {} : { remotePort: request.socket.remotePort }),
+        }),
+      },
+    },
+    routerOptions: {
+      // find-my-way's default is 100, and a path parameter longer than that is
+      // a bare 404. Seed codes (#133) run past it: a text seed's code is up to
+      // ~110 characters, a packed one longer. Every other parameter here (slug,
+      // id) is validated by its route anyway. Twice the cap, so a code just
+      // over it still reaches the route and is told why.
+      maxParamLength: MAX_SEED_CODE_LENGTH * 2,
+    },
     ajv: AJV_OPTIONS,
   });
 
@@ -166,6 +189,7 @@ export async function buildServer({ config, pool, db }: BuildServerDeps): Promis
   registerRootRoutes(app, config);
   registerAuthRoutes(app, { config, db });
   registerAuthorRoutes(app, { db });
+  registerAvatarRoutes(app, { config });
   registerMetaRoutes(app, config, db);
   registerLayoutRoutes(app, { config, db });
   registerExportRoutes(app, { config, db });
