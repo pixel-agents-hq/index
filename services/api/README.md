@@ -46,6 +46,9 @@ src/moderation/routes.ts GET /moderation/layouts — the moderation console's br
 
 src/users/routes.ts      GET /admin/users — read-only interacted-user directory
 src/authors/routes.ts    GET /authors/:id — public author identity/count
+src/avatars/render.ts    seed-code-only policy, caps and the bounded render cache for avatars
+src/avatars/routes.ts    GET /avatars/:seed.png — a pixatar avatar PNG for a seed code (#133)
+src/avatars/defaults.ts  the stored default avatar seed every user row is dealt once
 
 src/assets/zip.ts        shared zip/PNG plumbing (find a file, decode a PNG strictly, suffix a
                          colliding id) — used by all three decode modules below (#105)
@@ -118,6 +121,7 @@ is ever compiled in; see [`docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md#wha
 | `LOG_LEVEL` | | `info` | Pino level |
 | `RATE_LIMIT_MAX` / `RATE_LIMIT_WINDOW_MS` | | `300` / `60000` | General bucket |
 | `RATE_LIMIT_WRITE_MAX` / `RATE_LIMIT_WRITE_WINDOW_MS` | | `20` / `60000` | Tighter bucket for submission, render-triggering paths, and the auth endpoints |
+| `RATE_LIMIT_AVATAR_MAX` / `RATE_LIMIT_AVATAR_WINDOW_MS` | | `120` / `60000` | `GET /api/v1/avatars/:seed.png`'s own bucket — see [Avatars](#avatars) |
 | `PIXEL_AGENTS_DIR` | | auto-discovered | Where `vendor/pixel-agents` lives, for `GET /api/v1/meta` and submission validation |
 | `MAX_LAYOUT_BYTES` | | `2000000` | Submission size cap, refused before `JSON.parse` even runs — matches the renderer's own default so a layout accepted here is never subsequently rejected there |
 | `MAX_SUBMISSIONS_PER_USER_PER_DAY` | | `20` | Post-moderation means a flood is a real, cheap attack — a real 24h count, not a token bucket |
@@ -306,6 +310,7 @@ would confirm something is there to hide.
 | `GET /api/v1/layouts/:slug/download` | The raw bytes, verbatim — `Content-Disposition: attachment` |
 | `GET /api/v1/layouts/:slug/preview.png` | Proxied from the renderer, scale 1 |
 | `GET /api/v1/layouts/:slug/thumbnail.png` | Proxied from the renderer, scale **1** — same bytes as `preview.png`, see below |
+| `GET /api/v1/avatars/:seed.png` | A seed code's character avatar, drawn here — see [Avatars](#avatars) |
 | `GET /openapi.json` | The OpenAPI 3.1 document, generated from the same schemas below |
 | `GET /docs` | Swagger UI over the same document |
 
@@ -393,6 +398,72 @@ scalars (`($1, $2)`), and Postgres's `ANY()` operator requires an actual bound a
 its right-hand side — the combination throws `op ANY/ALL (array) requires array on right
 side` **at query time**, not at compile time. The tags ALL-match filter
 (`src/layouts/query.ts`) uses `sql.join(...)` to build a real `IN (…)` list instead.
+
+## Avatars
+
+`GET /api/v1/avatars/{seed}.png` (#133) draws the avatar
+[`@pixel-index/pixatar`](../../packages/pixatar/README.md) makes for a seed code: Pixel
+Agents' own mug shot of the character, on the code's background colour or on nothing.
+Public, no login, any origin (it is an image; an `<img>` needs no CORS).
+
+```bash
+curl -o octocat.png 'https://api.example.com/api/v1/avatars/px.ASMByrHtCcOaAj1fXEBDyipVOErZBwFd2AE_HAZdVTbyDX2JAR3X5AldBTX_Cn2IAR3U-gBCXzgIdbQBurY.png?scale=8'
+```
+
+That code is `seedFromText('octocat')`.
+
+| | |
+|---|---|
+| `seed` | A **seed code**: `px.` followed by base64url, at most 1024 characters. Free text is refused |
+| `?scale=` | Whole number, `1`–`16`, default `8`. The PNG is 20 × `scale` pixels square (160×160 by default) |
+| `?background=` | `color` or `transparent`. Omitted: as the seed code says |
+| `200` | `image/png`, a strong `ETag` over the bytes (`If-None-Match` → `304`), `Cache-Control: public, max-age=86400, stale-while-revalidate=604800`, `X-Content-Type-Options: nosniff`, and `X-Pixatar-Vendor`: the pinned Pixel Agents commit it was drawn with |
+| `400 invalid_seed` | Free text, a malformed code, or a damaged one |
+| `400 bad_request` | `scale` or `background` out of range, or any other query parameter |
+| `422 unknown_part` | A valid code naming a part this deployment's wardrobe does not have (made with a newer pin); a vendor bump may draw it |
+| `429 rate_limited` | Its own per-IP bucket, `RATE_LIMIT_AVATAR_MAX` (`120`) per `RATE_LIMIT_AVATAR_WINDOW_MS` (`60000`), with `Retry-After` |
+
+Errors use [the one envelope](#one-error-envelope). Decisions worth knowing:
+
+- **Seed codes only, never free text.** Free text is whatever someone typed, an email
+  address included, and a GET path lands in every access log on the way here. A seed code
+  is the character itself and says nothing about where it came from, so a client starting
+  from text makes the code where the text is typed (`seedFromText`, or the
+  [Python client](../../packages/pixatar/python/README.md)'s `from_text`) and asks for
+  that. A refused path is also redacted from this service's own request log, but a
+  reverse proxy in front keeps logs of its own. It also makes every URL deterministic:
+  the same code, scale and background give the same bytes for a given pin.
+- **Not `immutable`.** A code keeps its character across vendor bumps, but a bump that
+  redraws art changes the PNG it draws. A day's freshness plus a week of
+  stale-while-revalidate keeps repeat views free; the `ETag` makes revalidation a `304`.
+- **Scale is capped at 16**, not the package's 64. A render costs scale² and runs on the
+  event loop (about 5 ms at 8, 17 ms at 16, 250 ms at 64); 320×320 is already bigger than
+  anywhere an avatar is shown, and `image-rendering: pixelated` scales it further for free.
+  The 1024-character code cap also bounds a packed code's inflate. Rendered PNGs are kept
+  in a bounded in-process cache (1000 entries, a couple of megabytes).
+- **The router's parameter cap is raised** (`routerOptions.maxParamLength`, 2048): its
+  default of 100 is shorter than many seed codes, and an over-long parameter is a bare 404.
+
+The image needs no vendor sources for this: pixatar's dist bundles the wardrobe and the
+renderer ([Docker](#docker)).
+
+### Default avatars for authors without a picture
+
+Every user row is dealt a seed code once, stored in `users.avatar_seed`: from its own
+internal `id` (`seedFromText('pixel-index:user:<id>')`, in `src/avatars/defaults.ts`),
+never from a username, a display name or an email address. Every insert sets it (a
+Discord login, a bot-originated ghost user, a seed or backup author), and
+`db/backfill-avatar-seeds.ts` fills rows from before the column at boot, never rewriting
+one that is set. Storing the code, not re-dealing it, is what keeps an author's character
+through vendor bumps: a code is the character, the text it was dealt from may be dealt
+differently by a wardrobe with more parts.
+
+`PublicAuthor` (every author in a layout, asset, soundtrack or author response) carries it
+as `avatarSeed`, next to `avatarUrl`. `avatarUrl` is still the avatar someone *has* and is
+never replaced; a client shows `/api/v1/avatars/{avatarSeed}.png` only where `avatarUrl` is
+`null` (the web app's `authorAvatarSrc()`). `avatarSeed` is `null` only for a legacy credit
+with no account behind it. Nobody can pick or reroll theirs yet. A backup carries layouts
+and their credits, not user rows, so a restore into an empty database deals new defaults.
 
 ## Submitting a layout
 
@@ -750,6 +821,11 @@ The image also carries `vendor/pixel-agents/package.json` and its
 `GET /api/v1/meta` can report a real pinned version via `@pixel-index/layout-core`. This
 is a much smaller slice of upstream than the renderer needs, because the API only reads
 metadata; it never boots upstream's dev server the way the renderer does.
+
+The avatar route draws with `@pixel-index/pixatar`, which the **builder** stage builds from
+the pinned `core/src` and `webview-ui/src` (its wardrobe and the renderer it bundles). The
+runtime stage copies only `packages/pixatar/dist` and its `package.json`, so no vendor
+TypeScript ships in the image.
 
 Against a real containerised Postgres 17: migrations apply on first boot, `/ready`
 succeeds, `/ready` fails within milliseconds when Postgres is stopped (fails fast — this

@@ -4,7 +4,8 @@
 # pinned commit, then hand off to the real command (node
 # services/api/dist/index.js). This is what makes a self-hoster's first
 # `docker compose up` provision a working, populated database with no manual
-# step (see migrate.ts, backfill-seats.ts, backfill-asset-tags.ts, seed.ts,
+# step (see migrate.ts, backfill-seats.ts, backfill-asset-tags.ts,
+# backfill-avatar-seeds.ts, seed.ts,
 # sync-builtin-assets.ts) —
 # this entrypoint runs before every boot, not a one-off job compose has to
 # remember to run.
@@ -26,6 +27,9 @@ node services/api/dist/db/backfill-visible-bounds.js
 
 echo "Backfilling custom_assets.tags on any rows written before it existed…"
 node services/api/dist/db/backfill-asset-tags.js
+
+echo "Dealing default avatar seeds to any users from before users.avatar_seed existed…"
+node services/api/dist/db/backfill-avatar-seeds.js
 
 echo "Seeding starter layouts if the database is empty…"
 node services/api/dist/db/seed.js

@@ -9,6 +9,7 @@
 import type { LayoutMeta } from '@pixel-index/layout-core';
 import { and, asc, desc, eq, gte, inArray, lte, sql } from 'drizzle-orm';
 
+import { newUserIdentity } from '../avatars/defaults.js';
 import type { AnyDatabase } from '../db/client.js';
 import { SYSTEM_USER_ID } from '../db/constants.js';
 import { one } from '../db/rows.js';
@@ -520,7 +521,7 @@ export async function resolveAuthorFromMeta(
   const created = one(
     await db
       .insert(schema.users)
-      .values({ discordId: meta.authorDiscordId, username: meta.author })
+      .values({ ...newUserIdentity(), discordId: meta.authorDiscordId, username: meta.author })
       .returning({ id: schema.users.id }),
   );
   return { authorUserId: created.id, authorDisplay: null };

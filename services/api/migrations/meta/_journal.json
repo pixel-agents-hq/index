@@ -141,6 +141,13 @@
       "when": 1793127288542,
       "tag": "0019_soundtracks",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1794771100600,
+      "tag": "0020_user_avatar_seed",
+      "breakpoints": true
     }
   ]
 }

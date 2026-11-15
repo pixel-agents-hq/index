@@ -16,18 +16,34 @@ COPY package.json package-lock.json ./
 # often as they do, and the layer caching should reflect that.
 COPY tsconfig.strict.json ./
 COPY packages/layout-core/package.json ./packages/layout-core/
+COPY packages/pixatar/package.json ./packages/pixatar/
 COPY services/api/package.json ./services/api/
-RUN npm ci --workspace @pixel-index/layout-core --workspace @pixel-index/api --include-workspace-root
+RUN npm ci --workspace @pixel-index/layout-core --workspace @pixel-index/pixatar --workspace @pixel-index/api --include-workspace-root
 
 COPY packages/layout-core ./packages/layout-core
+
+# GET /api/v1/avatars/:seed.png (#133) draws with the avatar package. Building
+# it bakes the pinned wardrobe (webview-ui/src/characters/art) and bundles the
+# upstream renderer and profile sources it imports into its dist, so these
+# vendor sources are needed here in the builder only: the runtime stage below
+# copies packages/pixatar/dist and no vendor TypeScript. The pin comes from
+# vendor/pixel-agents.commit, not git: there is no git in this image, and the
+# version from vendor/pixel-agents/package.json.
+COPY vendor/pixel-agents.commit ./vendor/pixel-agents.commit
+COPY vendor/pixel-agents/package.json ./vendor/pixel-agents/package.json
+COPY vendor/pixel-agents/core/src ./vendor/pixel-agents/core/src
+COPY vendor/pixel-agents/webview-ui/src ./vendor/pixel-agents/webview-ui/src
+COPY packages/pixatar ./packages/pixatar
+
 COPY services/api ./services/api
 RUN npm run build --workspace @pixel-index/layout-core \
+ && npm run build --workspace @pixel-index/pixatar \
  && npm run build --workspace @pixel-index/api
 
 # Drop devDependencies (drizzle-kit, tsx, typescript, vitest, PGlite …) —
 # drizzle-kit never runs in production, and prod's own tree audits clean even
 # though drizzle-kit's dev-only esbuild chain does not. See services/api/README.md.
-RUN npm prune --omit=dev --workspace @pixel-index/layout-core --workspace @pixel-index/api
+RUN npm prune --omit=dev --workspace @pixel-index/layout-core --workspace @pixel-index/pixatar --workspace @pixel-index/api
 
 # ── Runtime ───────────────────────────────────────────────────────────────
 FROM node:22-alpine AS runtime
@@ -40,6 +56,11 @@ RUN addgroup -S pixelindex && adduser -S pixelindex -G pixelindex
 COPY --from=builder --chown=pixelindex:pixelindex /app/node_modules ./node_modules
 COPY --from=builder --chown=pixelindex:pixelindex /app/package.json ./package.json
 COPY --from=builder --chown=pixelindex:pixelindex /app/packages/layout-core ./packages/layout-core
+# Only the built package: its dist bundles the wardrobe and renderer, so it
+# reads nothing of vendor/pixel-agents at runtime (fflate, its one dependency,
+# is in node_modules above).
+COPY --from=builder --chown=pixelindex:pixelindex /app/packages/pixatar/package.json ./packages/pixatar/package.json
+COPY --from=builder --chown=pixelindex:pixelindex /app/packages/pixatar/dist ./packages/pixatar/dist
 COPY --from=builder --chown=pixelindex:pixelindex /app/services/api/dist ./services/api/dist
 COPY --from=builder --chown=pixelindex:pixelindex /app/services/api/package.json ./services/api/package.json
 COPY --from=builder --chown=pixelindex:pixelindex /app/services/api/migrations ./services/api/migrations

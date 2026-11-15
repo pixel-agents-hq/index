@@ -1,5 +1,7 @@
+import { isSeedCode } from '@pixel-index/pixatar';
 import { describe, expect, it } from 'vitest';
 
+import { defaultAvatarSeed } from '../avatars/defaults.js';
 import type { Layout, User } from '../db/schema.js';
 import { toDetail, toSummary } from './serialize.js';
 
@@ -45,6 +47,7 @@ function makeUser(overrides: Partial<User> = {}): User {
     globalName: null,
     guildNickname: null,
     avatarUrl: 'https://cdn.discordapp.com/avatars/123/abc.png',
+    avatarSeed: 'px.stored-seed',
     role: 'user',
     isSystem: false,
     discordGuildMember: null,
@@ -63,6 +66,7 @@ describe('toSummary — author mapping', () => {
       username: 'someone',
       displayName: 'someone',
       avatarUrl: 'https://cdn.discordapp.com/avatars/123/abc.png',
+      avatarSeed: 'px.stored-seed',
     });
   });
 
@@ -80,6 +84,9 @@ describe('toSummary — author mapping', () => {
       username: 'legacy-credit',
       displayName: 'legacy-credit',
       avatarUrl: null,
+      // No account behind a legacy credit, so no stored default either: not
+      // the system user's, which every legacy credit would then share.
+      avatarSeed: null,
     });
   });
 
@@ -87,6 +94,30 @@ describe('toSummary — author mapping', () => {
     const summary = toSummary(makeLayout(), null, []);
     expect(summary.author.username).toBe('unknown');
     expect(summary.author.discordId).toBeNull();
+    expect(summary.author.avatarSeed).toBeNull();
+  });
+});
+
+describe('toSummary — default avatars (#133)', () => {
+  it('keeps a provided avatar, and still gives the stored default seed beside it', () => {
+    const { author } = toSummary(makeLayout(), makeUser(), []);
+    expect(author.avatarUrl).toBe('https://cdn.discordapp.com/avatars/123/abc.png');
+    expect(author.avatarSeed).toBe('px.stored-seed');
+  });
+
+  it('gives an author without a picture their stored seed, never one dealt from their name', () => {
+    const { author } = toSummary(makeLayout(), makeUser({ avatarUrl: null, avatarSeed: 'px.mine' }), []);
+    expect(author.avatarUrl).toBeNull();
+    expect(author.avatarSeed).toBe('px.mine');
+    // Renaming the account changes nothing about the avatar.
+    const renamed = toSummary(makeLayout(), makeUser({ avatarUrl: null, avatarSeed: 'px.mine', username: 'new' }), []);
+    expect(renamed.author.avatarSeed).toBe('px.mine');
+  });
+
+  it('deals the same seed the backfill would for a row that has none yet', () => {
+    const { author } = toSummary(makeLayout(), makeUser({ avatarSeed: null }), []);
+    expect(author.avatarSeed).toBe(defaultAvatarSeed('author-id'));
+    expect(isSeedCode(author.avatarSeed ?? '')).toBe(true);
   });
 });
 

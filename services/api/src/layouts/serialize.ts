@@ -3,6 +3,7 @@
  * (and their OpenAPI response schemas) can never quietly drift apart.
  */
 
+import { defaultAvatarSeed } from '../avatars/defaults.js';
 import type * as schema from '../db/schema.js';
 
 export interface PublicAuthor {
@@ -18,7 +19,14 @@ export interface PublicAuthor {
   username: string;
   /** Guild nickname, then global Discord name, then username. */
   displayName: string;
+  /** The avatar someone has (their Discord one), or null. Shown before `avatarSeed`. */
   avatarUrl: string | null;
+  /**
+   * The seed code of this account's default avatar (#133), for
+   * `/api/v1/avatars/{avatarSeed}.png` where `avatarUrl` is null. Null only for
+   * a legacy credit with no account behind it.
+   */
+  avatarSeed: string | null;
 }
 
 export interface PublicLayoutSummary {
@@ -54,6 +62,17 @@ export interface PublicLayoutDetail extends PublicLayoutSummary {
   layout: unknown;
 }
 
+/**
+ * A row's stored default avatar seed. Every insert sets one and the boot
+ * backfill fills the rest, so the fallback only covers a database nobody ran
+ * the backfill on (a `npm run dev` against an old dump): it deals the same code
+ * the backfill would.
+ */
+export function authorAvatarSeed(author: Pick<schema.User, 'id' | 'avatarSeed'> | null): string | null {
+  if (!author) return null;
+  return author.avatarSeed ?? defaultAvatarSeed(author.id);
+}
+
 export function publicAuthor(layout: schema.Layout, author: schema.User | null): PublicAuthor {
   if (layout.authorDisplay && (!author || author.isSystem)) {
     return {
@@ -61,6 +80,7 @@ export function publicAuthor(layout: schema.Layout, author: schema.User | null):
       username: layout.authorDisplay,
       displayName: layout.authorDisplay,
       avatarUrl: null,
+      avatarSeed: null,
     };
   }
   const username = author?.username ?? 'unknown';
@@ -69,6 +89,7 @@ export function publicAuthor(layout: schema.Layout, author: schema.User | null):
     username,
     displayName: author?.guildNickname ?? author?.globalName ?? username,
     avatarUrl: author?.avatarUrl ?? null,
+    avatarSeed: authorAvatarSeed(author),
   };
 }
 

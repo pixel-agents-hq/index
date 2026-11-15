@@ -191,6 +191,16 @@ export const users = pgTable(
     /** Nickname in the configured Pixel Index guild, when membership was last verified. */
     guildNickname: text('guild_nickname'),
     avatarUrl: text('avatar_url'),
+    /**
+     * The pixatar seed code (`px.…`) of this account's default avatar (#133),
+     * drawn by `GET /api/v1/avatars/:seed.png` wherever `avatarUrl` is null.
+     * Dealt once from the row's own `id` (avatars/defaults.ts), never from a
+     * username or email, and then stored: a code keeps its character across
+     * vendor bumps, the text it was dealt from may not. Set on insert;
+     * backfill-avatar-seeds.ts fills rows from before the column, and never
+     * rewrites one that is set.
+     */
+    avatarSeed: text('avatar_seed'),
 
     /** Last successfully derived capability cache; Discord/config is authoritative. */
     role: userRole('role').notNull().default('user'),

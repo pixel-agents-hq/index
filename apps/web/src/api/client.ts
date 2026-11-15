@@ -20,6 +20,7 @@ import type {
   ListSoundtracksResponse,
   ListTagsResponse,
   MetaResponse,
+  PublicAuthor,
   PublicAuthorResponse,
 } from './types';
 
@@ -229,6 +230,17 @@ export function getOpenApiSpec(signal?: AbortSignal): Promise<OpenApiDocument> {
  */
 export function apiUrl(path: string): string {
   return `${API_BASE_URL}${path}`;
+}
+
+/**
+ * What an author's `<img src>` shows: the avatar they have, else the default
+ * one the API draws from their stored seed code (#133), else nothing. The seed
+ * code is all the URL carries: never a name.
+ */
+export function authorAvatarSrc(author: Pick<PublicAuthor, 'avatarUrl' | 'avatarSeed'>): string | null {
+  if (author.avatarUrl) return author.avatarUrl;
+  if (author.avatarSeed) return apiUrl(`/api/v1/avatars/${encodeURIComponent(author.avatarSeed)}.png`);
+  return null;
 }
 
 /**

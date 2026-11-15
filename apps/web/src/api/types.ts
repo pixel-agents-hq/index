@@ -14,7 +14,15 @@ export interface PublicAuthor {
   discordId: string | null;
   username: string;
   displayName: string;
+  /** The avatar someone has (their Discord one). Shown before `avatarSeed`. */
   avatarUrl: string | null;
+  /**
+   * The seed code of the account's default avatar (#133), drawn by
+   * `/api/v1/avatars/{avatarSeed}.png` where `avatarUrl` is null. Null for a
+   * legacy credit with no account; absent from an API older than #133, which
+   * this build may well be talking to.
+   */
+  avatarSeed?: string | null;
 }
 
 export interface LayoutFiles {

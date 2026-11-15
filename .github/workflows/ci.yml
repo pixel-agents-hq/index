@@ -188,9 +188,11 @@ jobs:
       # typecheck:e2e/test:e2e are called workspace-scoped, which skips the
       # root's pretypecheck/pretest hooks (npm only fires "pre*" lifecycle
       # scripts for the root-level script of the same name) — build
-      # layout-core explicitly instead of relying on that.
-      - name: Build layout-core
-        run: npm run build:core
+      # layout-core explicitly instead of relying on that. pixatar too: the e2e
+      # tsconfig includes the API's src/, and its avatar route (#133) imports
+      # the package's dist.
+      - name: Build layout-core and pixatar
+        run: npm run build:core && npm run build:pixatar
 
       - name: Typecheck the e2e script itself
         run: npm run typecheck:e2e --workspace @pixel-index/api

@@ -15,8 +15,11 @@ export const publicAuthorSchema = {
     username: { type: 'string' },
     displayName: { type: 'string' },
     avatarUrl: { type: ['string', 'null'] },
+    // The default avatar's seed code, for /api/v1/avatars/{avatarSeed}.png
+    // where avatarUrl is null (#133).
+    avatarSeed: { type: ['string', 'null'] },
   },
-  required: ['discordId', 'username', 'displayName', 'avatarUrl'],
+  required: ['discordId', 'username', 'displayName', 'avatarUrl', 'avatarSeed'],
 } as const;
 
 const filesSchema = {

@@ -66,6 +66,7 @@ describe('GET /api/v1/layouts', () => {
       username: 'route-author',
       displayName: 'route-author',
       avatarUrl: null,
+      avatarSeed: author.avatarSeed,
     });
     expect(entry?.tags).toEqual(['route-tag']);
     expect(entry?.files.layout).toBe('/api/v1/layouts/route-list-basic/download');

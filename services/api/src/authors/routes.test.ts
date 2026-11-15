@@ -45,12 +45,28 @@ describe('GET /api/v1/authors/:id', () => {
         username: 'discord-handle',
         displayName: 'Guild Nick',
         avatarUrl: 'https://cdn.discordapp.com/avatar.png',
+        avatarSeed: author.avatarSeed,
       },
       publicLayoutCount: 1,
     });
     // The internal UUID must never appear in a public author response.
     expect(response.body).not.toContain(author.id);
     expect(response.body).not.toContain('role');
+  });
+
+  it('gives an author without a picture a stored default avatar the avatar route draws (#133)', async () => {
+    const author = await insertUser(harness.db, { username: 'no-picture', avatarUrl: null });
+    await insertLayout(harness.db, { authorUserId: author.id, visibility: 'public' });
+    const response = await app.inject({ method: 'GET', url: `/api/v1/authors/${author.discordId ?? ''}` });
+    const { avatarUrl, avatarSeed } = response.json<{ author: { avatarUrl: null; avatarSeed: string } }>().author;
+    expect(avatarUrl).toBeNull();
+    expect(avatarSeed).toBe(author.avatarSeed);
+    expect(avatarSeed).toMatch(/^px\.[A-Za-z0-9_-]+$/);
+    expect(avatarSeed).not.toContain('no-picture');
+
+    const avatar = await app.inject({ method: 'GET', url: `/api/v1/avatars/${avatarSeed}.png` });
+    expect(avatar.statusCode).toBe(200);
+    expect(avatar.headers['content-type']).toBe('image/png');
   });
 
   it('404s for the internal UUID — the public route no longer accepts it', async () => {

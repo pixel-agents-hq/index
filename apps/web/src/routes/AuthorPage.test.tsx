@@ -7,14 +7,15 @@ import { AuthorPage } from './AuthorPage';
 
 afterEach(() => vi.unstubAllGlobals());
 
-describe('AuthorPage', () => {
-  it('shows the public Discord display identity and only the API-provided public layouts', async () => {
+const AUTHOR = { discordId: 'author-1', username: 'discord-handle', displayName: 'Guild Nick', avatarUrl: null };
+
+function stubApi(author: Record<string, unknown> = AUTHOR) {
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
       const url = requestUrl(input);
       if (url.includes('/api/v1/authors/author-1')) {
         return Response.json({
           schemaVersion: 1,
-          author: { discordId: 'author-1', username: 'discord-handle', displayName: 'Guild Nick', avatarUrl: null },
+          author,
           publicLayoutCount: 1,
         });
       }
@@ -75,12 +76,20 @@ describe('AuthorPage', () => {
       }
       return new Response('not found', { status: 404 });
     }));
+}
 
-    render(
+function renderPage() {
+  return render(
       <MemoryRouter initialEntries={['/authors/author-1']}>
         <Routes><Route path="authors/:id" element={<AuthorPage />} /></Routes>
       </MemoryRouter>,
     );
+}
+
+describe('AuthorPage', () => {
+  it('shows the public Discord display identity and only the API-provided public layouts', async () => {
+    stubApi();
+    renderPage();
     expect(await screen.findByRole('heading', { name: 'Guild Nick' })).toBeInTheDocument();
     expect(screen.getByText('@discord-handle')).toBeInTheDocument();
     expect(screen.getByText('1 public layout')).toBeInTheDocument();
@@ -92,5 +101,31 @@ describe('AuthorPage', () => {
       'href',
       '/soundtracks?author=author-1&authorLabel=Guild+Nick',
     );
+  });
+
+  it('shows the avatar the author has (#133 never replaces it)', async () => {
+    stubApi({ ...AUTHOR, avatarUrl: 'https://cdn.discordapp.com/avatars/1/a.png', avatarSeed: 'px.ASMB' });
+    const { container } = renderPage();
+    await screen.findByRole('heading', { name: 'Guild Nick' });
+    const img = container.querySelector('header img');
+    expect(img).toHaveAttribute('src', 'https://cdn.discordapp.com/avatars/1/a.png');
+    expect(img?.className).not.toContain('pixelated');
+  });
+
+  it("draws an author without a picture from their stored seed code, not their name", async () => {
+    stubApi({ ...AUTHOR, avatarSeed: 'px.ASMByrHtCcOa' });
+    const { container } = renderPage();
+    await screen.findByRole('heading', { name: 'Guild Nick' });
+    const src = container.querySelector('header img')?.getAttribute('src') ?? '';
+    expect(src).toMatch(/\/api\/v1\/avatars\/px\.ASMByrHtCcOa\.png$/);
+    expect(src).not.toContain('discord-handle');
+    expect(container.querySelector('header img')?.className).toContain('[image-rendering:pixelated]');
+  });
+
+  it('shows no picture for an API older than #133 that sends no seed', async () => {
+    stubApi();
+    const { container } = renderPage();
+    await screen.findByRole('heading', { name: 'Guild Nick' });
+    expect(container.querySelector('header img')).toBeNull();
   });
 });

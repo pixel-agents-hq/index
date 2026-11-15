@@ -670,6 +670,15 @@ API only ever sees the real client IP directly. The moment you put a reverse pro
 front of it, flip this to `true` in `.env` — otherwise rate limiting keys on the proxy's
 IP, and every client behind it shares one bucket.
 
+### Your proxy's access log sees avatar paths
+
+`GET /api/v1/avatars/{seed}.png` draws seed codes only and refuses free text, so a
+well-behaved client never puts a name or an email address in that path. A careless one
+still can, and while the API redacts anything under the avatar path that isn't a seed
+code from its own request log, a reverse proxy logs the path before the API ever sees it.
+If your proxy keeps access logs, treat them as possibly holding what someone typed there
+(see [the avatar route](../services/api/README.md#avatars)).
+
 ### `localhost` inside a container resolves to IPv6 first
 
 Every health check in this repo's images probes `127.0.0.1`, never `localhost`. A

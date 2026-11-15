@@ -25,6 +25,8 @@ const ENV_KEYS = [
   'RATE_LIMIT_WRITE_WINDOW_MS',
   'RATE_LIMIT_EXPORT_MAX',
   'RATE_LIMIT_EXPORT_WINDOW_MS',
+  'RATE_LIMIT_AVATAR_MAX',
+  'RATE_LIMIT_AVATAR_WINDOW_MS',
   'INITIAL_ADMIN_DISCORD_ID',
   'DISCORD_ADMIN_IDS',
   'DISCORD_GUILD_ID',
@@ -448,6 +450,14 @@ describe('loadConfig — defaults', () => {
     const config = loadConfig();
     expect(config.exportRateLimit.max).toBeLessThan(config.rateLimit.max);
   });
+
+  it('gives avatar renders their own bucket, tighter than the general one', () => {
+    // Every cache miss is a render on the event loop (#133).
+    setRequired();
+    const config = loadConfig();
+    expect(config.avatarRateLimit).toEqual({ max: 120, windowMs: 60_000 });
+    expect(config.avatarRateLimit.max).toBeLessThan(config.rateLimit.max);
+  });
 });
 
 describe('loadConfig — overrides', () => {
@@ -462,6 +472,8 @@ describe('loadConfig — overrides', () => {
       RATE_LIMIT_WRITE_WINDOW_MS: '1000',
       RATE_LIMIT_EXPORT_MAX: '3',
       RATE_LIMIT_EXPORT_WINDOW_MS: '2000',
+      RATE_LIMIT_AVATAR_MAX: '4',
+      RATE_LIMIT_AVATAR_WINDOW_MS: '3000',
     });
     const config = loadConfig();
     expect(config.port).toBe(8080);
@@ -470,6 +482,7 @@ describe('loadConfig — overrides', () => {
     expect(config.rateLimit).toEqual({ max: 10, windowMs: 5000 });
     expect(config.writeRateLimit).toEqual({ max: 2, windowMs: 1000 });
     expect(config.exportRateLimit).toEqual({ max: 3, windowMs: 2000 });
+    expect(config.avatarRateLimit).toEqual({ max: 4, windowMs: 3000 });
   });
 
   it('rejects a non-boolean for API_TRUST_PROXY', () => {
