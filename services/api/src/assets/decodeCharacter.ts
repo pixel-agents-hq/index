@@ -2,8 +2,10 @@
  * Turns an uploaded custom-character zip into what `custom_assets` stores.
  *
  * A character is `manifest.json` (just `{id, name}`, same minimal shape as a
- * pet's) alongside one PNG (112×96: 3 direction rows × 7 frames of 16×32
- * each), purely positional within the sheet (#105). The manifest gives
+ * pet's) alongside one PNG (128×96: 3 direction rows × 8 frames of 16×32
+ * each — walk1-3, type1-2, read1-2, seated), purely positional within the
+ * sheet (#105). A sheet made before upstream's seated frame (112×96, 7
+ * frames) is still accepted and widened the way upstream widens it. The manifest gives
  * pixel-index a stable id/name without asking the uploader to retype either —
  * the same reasoning `decodePet.ts` documents for pets.
  *
@@ -11,9 +13,10 @@
  * `custom-asset-character-manifest.schema.json` contract, the same pattern
  * `decodePet.ts` follows for `custom-asset-pet-manifest.schema.json`.
  *
- * The 112×96 frame-grid layout is a hand-kept LOCAL copy of
- * `vendor/pixel-agents/core/src/assets/pngDecoder.ts`'s `decodeCharacterPng`
- * and `constants.ts`'s character constants, not an import of it — same
+ * The 128×96 frame-grid layout is a hand-kept LOCAL copy of
+ * `vendor/pixel-agents/core/src/assets/pngDecoder.ts`'s `decodeCharacterPng`,
+ * `characterSheet.ts`, `seatedFrame.ts` and `constants.ts`'s character
+ * constants, not an import of them — same
  * "read the pinned upstream's shape at the boundary, never cross it with a
  * module import" rule `manifest.ts`'s header already documents for
  * `tsconfig.build.json`'s `rootDir: "src"`. Keep this in sync by hand if
@@ -39,9 +42,15 @@ import {
 
 const CHAR_FRAME_W = 16;
 const CHAR_FRAME_H = 32;
-const CHAR_FRAMES_PER_ROW = 7;
+const CHAR_FRAMES_PER_ROW = 8;
+/** Frames per row of a sheet made before upstream's seated frame (column 7, last). */
+const LEGACY_FRAMES_PER_ROW = 7;
+/** The typing frames the seated frame is derived from (upstream's `seatedFrame.ts`). */
+const TYPE1 = 3;
+const TYPE2 = 4;
 const CHARACTER_DIRECTIONS = ['down', 'up', 'right'] as const;
-export const CHARACTER_WIDTH = CHAR_FRAME_W * CHAR_FRAMES_PER_ROW; // 112
+export const CHARACTER_WIDTH = CHAR_FRAME_W * CHAR_FRAMES_PER_ROW; // 128
+export const LEGACY_CHARACTER_WIDTH = CHAR_FRAME_W * LEGACY_FRAMES_PER_ROW; // 112
 export const CHARACTER_HEIGHT = CHAR_FRAME_H * CHARACTER_DIRECTIONS.length; // 96
 
 export interface CharacterFrames {
@@ -71,6 +80,35 @@ export interface DecodedCharacterAsset {
 }
 
 /**
+ * A direction row's seated frame, built from its typing frames by upstream's
+ * one recipe (`seatedSource`): side-on is type1; front and back take their
+ * left half from type2 and their right half from type1.
+ */
+function seatedFrame(dir: (typeof CHARACTER_DIRECTIONS)[number], frames: string[][][]): string[][] {
+  const type1 = frames[TYPE1] ?? [];
+  const type2 = frames[TYPE2] ?? [];
+  return Array.from({ length: CHAR_FRAME_H }, (_, y) =>
+    Array.from({ length: CHAR_FRAME_W }, (_, x) => {
+      const source = dir === 'right' || x >= CHAR_FRAME_W / 2 ? type1 : type2;
+      return source[y]?.[x] ?? '';
+    }),
+  );
+}
+
+/**
+ * Stored frames in the current 8-frame layout. Rows decoded before the
+ * seated frame existed hold 7 frames per direction; they gain the seated
+ * frame here, wherever they leave the API, instead of by a data migration.
+ */
+export function currentCharacterFrames(frames: CharacterFrames): CharacterFrames {
+  const widen = (dir: (typeof CHARACTER_DIRECTIONS)[number]) => {
+    const row = frames[dir];
+    return row.length === LEGACY_FRAMES_PER_ROW ? [...row, seatedFrame(dir, row)] : row;
+  };
+  return { down: widen('down'), up: widen('up'), right: widen('right') };
+}
+
+/**
  * Strip trailing bytes after the PNG IEND chunk — Aseprite-generated PNGs
  * sometimes include trailing null bytes after IEND, which makes `pngjs`
  * throw. Ported from upstream's `pngDecoder.ts` (`sanitizePngBuffer`).
@@ -91,19 +129,20 @@ function decodeCharacterPng(buffer: Buffer, path: string): CharacterFrames {
   } catch {
     throw issue(path, 'Could not be parsed as a PNG.');
   }
-  if (png.width !== CHARACTER_WIDTH || png.height !== CHARACTER_HEIGHT) {
+  if ((png.width !== CHARACTER_WIDTH && png.width !== LEGACY_CHARACTER_WIDTH) || png.height !== CHARACTER_HEIGHT) {
     throw issue(
       path,
-      `A character sprite must be ${CHARACTER_WIDTH}×${CHARACTER_HEIGHT} but this PNG is ${png.width}×${png.height}.`,
+      `A character sprite must be ${CHARACTER_WIDTH}×${CHARACTER_HEIGHT} (or ${LEGACY_CHARACTER_WIDTH}×${CHARACTER_HEIGHT} without the seated frame) but this PNG is ${png.width}×${png.height}.`,
     );
   }
+  const framesPerRow = png.width / CHAR_FRAME_W;
 
   const result = { down: [], up: [], right: [] } as unknown as CharacterFrames;
   for (let dirIdx = 0; dirIdx < CHARACTER_DIRECTIONS.length; dirIdx++) {
     const dir = CHARACTER_DIRECTIONS[dirIdx] as (typeof CHARACTER_DIRECTIONS)[number];
     const rowOffsetY = dirIdx * CHAR_FRAME_H;
     const frames: string[][][] = [];
-    for (let f = 0; f < CHAR_FRAMES_PER_ROW; f++) {
+    for (let f = 0; f < framesPerRow; f++) {
       const frameOffsetX = f * CHAR_FRAME_W;
       const sprite: string[][] = [];
       for (let y = 0; y < CHAR_FRAME_H; y++) {
@@ -129,23 +168,24 @@ function decodeCharacterPng(buffer: Buffer, path: string): CharacterFrames {
     }
     result[dir] = frames;
   }
-  return result;
+  return currentCharacterFrames(result);
 }
 
 /**
- * The exact inverse of `decodeCharacterPng` — reassembles the 112×96,
- * 3-direction × 7-frame sheet a `char_N.png` external-asset file must be
+ * The exact inverse of `decodeCharacterPng` — reassembles the 128×96,
+ * 3-direction × 8-frame sheet a `char_N.png` external-asset file must be
  * (#119's export path, `exportZip.ts`), so pixel-agents' own
  * `decodeCharacterPng` (which this codebase's copy is pinned to, see the
  * file header) reads it back identically to how it was originally decoded.
  */
 export function encodeCharacterSheet(frames: CharacterFrames): Buffer {
+  const current = currentCharacterFrames(frames);
   const grid: string[][] = [];
   for (const dir of CHARACTER_DIRECTIONS) {
     for (let y = 0; y < CHAR_FRAME_H; y++) {
       const row: string[] = [];
       for (let f = 0; f < CHAR_FRAMES_PER_ROW; f++) {
-        const frame = frames[dir][f];
+        const frame = current[dir][f];
         for (let x = 0; x < CHAR_FRAME_W; x++) {
           row.push(frame?.[y]?.[x] ?? '');
         }

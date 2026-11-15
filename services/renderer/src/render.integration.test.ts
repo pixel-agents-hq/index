@@ -622,7 +622,7 @@ describe('custom characters (#105)', () => {
   /** One solid-colour frame, repeated for every direction/frame slot — content doesn't matter, only that the pipeline accepts and forwards it. */
   function frames16x32(): string[][][] {
     const frame = Array.from({ length: 32 }, () => Array.from({ length: 16 }, () => '#00ffff'));
-    return Array.from({ length: 7 }, () => frame);
+    return Array.from({ length: 8 }, () => frame);
   }
 
   const CUSTOM_CHARACTER = {
@@ -637,7 +637,7 @@ describe('custom characters (#105)', () => {
       // one positionally, outside the layout — see `customAssets.ts`'s own
       // doc comment), so there is no "layout that places this character" to
       // render differently. This proves what IS provable at this boundary:
-      // the `assets/decoded/characters.json` interception runs without
+      // the `characterSpritesLoaded` injection runs without
       // throwing and the render still completes — the same "accepts and
       // renders, without asserting pixel placement" honesty the furniture
       // test above states outright.

@@ -150,7 +150,7 @@ describe('POST /api/v1/assets — assetKind auto-detection from zip contents (#1
     expect(body.name).toBe('Bubbles');
   });
 
-  it("detects a character from its own manifest.json + a 112×96 PNG (no category, no manifest 'category' field)", async () => {
+  it("detects a character from its own manifest.json + a 128×96 PNG (no category, no manifest 'category' field)", async () => {
     const { accessToken } = await tokenFor({ username: 'character-uploader' });
     const response = await submit('', await characterZip('MY_CHARACTER', 'My Character'), {
       authorization: `Bearer ${accessToken}`,

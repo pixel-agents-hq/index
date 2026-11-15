@@ -125,16 +125,23 @@ layout — not the manifest.
   isn't otherwise anywhere in the zip.
 - **A pet manifest and a character manifest are indistinguishable by shape alone** — kind
   detection instead relies on each decode module's own PNG dimension/layout check (a
-  112×96 single-pose sheet vs. a 96×96 frame grid); see the "Kind detection" note below.
+  128×96 (or legacy 112×96) single-pose sheet vs. a 96×96 frame grid); see the "Kind detection" note below.
 - Exactly one PNG alongside the manifest.
-- PNG must be exactly **112×96 pixels**.
-- Frame grid (source of truth: `vendor/pixel-agents/core/src/assets/constants.ts` +
-  `pngDecoder.ts`'s `decodeCharacterPng`, pinned at commit
-  [`3537e14`](https://github.com/pixel-agents-hq/pixel-agents/commit/3537e140c2094761beae748592aeb92ece8edfdd)):
+- PNG must be exactly **128×96 pixels**, or **112×96** for a sheet drawn before
+  upstream's seated frame existed (its seated frame is then derived, see below).
+- Frame grid (source of truth: `vendor/pixel-agents/core/src/assets/constants.ts`,
+  `characterSheet.ts`, `seatedFrame.ts` and `pngDecoder.ts`'s `decodeCharacterPng`, pinned at commit
+  [`226a5c9`](https://github.com/pixel-agents-hq/pixel-agents/commit/226a5c91c45c120f41fdefe9d1e8817599a022e9)):
   - 3 direction rows, top to bottom: `down`, `up`, `right` (`CHARACTER_DIRECTIONS`).
     Each row is `CHAR_FRAME_H = 32` px tall → 3 × 32 = **96**.
-  - 7 frame columns per row (`CHAR_FRAMES_PER_ROW = 7`), each `CHAR_FRAME_W = 16` px
-    wide → 7 × 16 = **112**.
+  - 8 frame columns per row (`CHAR_FRAMES_PER_ROW = 8`), each `CHAR_FRAME_W = 16` px
+    wide → 8 × 16 = **128**: walk1-3, type1-2, read1-2, seated.
+  - A 112×96 legacy sheet has the first 7 columns only. Its seated frame (column 7) is
+    built from the typing frames the way upstream's `seatedFrame.ts` builds it: side-on
+    from type1; front and back take their left half from type2 and their right half
+    from type1. Rows stored before this pin hold 7 frames a row and are widened the same
+    way wherever they leave the API (`currentCharacterFrames`), and exports always write
+    the 128×96 sheet.
   - `left` is not a row — it's derived at render time by horizontally flipping `right`.
 
 ## Pet (detected as `assetKind: "pet"`)

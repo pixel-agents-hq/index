@@ -51,7 +51,7 @@ async function insertCharacter(harness: Harness, assetId: string) {
     requestedAssetId: assetId,
     name: assetId,
     category: null,
-    manifest: [{ id: assetId, name: assetId, label: assetId, width: 112, height: 96 }],
+    manifest: [{ id: assetId, name: assetId, label: assetId, width: 128, height: 96 }],
     sprites: {
       [assetId]: {
         down: [grid16(), grid16(), grid16(), grid16(), grid16(), grid16(), grid16()],
@@ -74,7 +74,7 @@ async function insertBuiltinCharacter(harness: Harness, assetId: string) {
     requestedAssetId: assetId,
     name: assetId,
     category: null,
-    manifest: [{ id: assetId, name: assetId, label: assetId, width: 112, height: 96 }],
+    manifest: [{ id: assetId, name: assetId, label: assetId, width: 128, height: 96 }],
     sprites: {
       [assetId]: {
         down: [grid16(), grid16(), grid16(), grid16(), grid16(), grid16(), grid16()],

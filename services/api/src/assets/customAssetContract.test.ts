@@ -127,7 +127,7 @@ describe('custom-asset-pet-manifest.schema.json', () => {
 });
 
 describe('custom-asset-character-manifest.schema.json', () => {
-  it('accepts characterZip (manifest.json + 112x96 PNG)', async () => {
+  it('accepts characterZip (manifest.json + 128x96 PNG)', async () => {
     const manifest = await readManifest(await characterZip('MY_CHARACTER', 'My Character'));
     const ok = validateCharacterManifest(manifest);
     expect(ok, JSON.stringify(validateCharacterManifest.errors)).toBe(true);
@@ -143,7 +143,7 @@ describe('custom-asset-character-manifest.schema.json', () => {
 });
 
 describe('character PNG dimensions match the documented frame grid', () => {
-  it('characterZip produces a 112x96 PNG', async () => {
+  it('characterZip produces a 128x96 PNG', async () => {
     const zipBuffer = await characterZip('MY_CHARACTER', 'My Character');
     const zip = await JSZip.loadAsync(zipBuffer);
     const pngPath = Object.keys(zip.files).find((name) => name.toLowerCase().endsWith('.png'));

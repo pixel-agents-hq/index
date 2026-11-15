@@ -61,7 +61,7 @@ export async function characterZip(
   if (overrides.includeManifest !== false) {
     zip.file('manifest.json', JSON.stringify({ id, name }));
   }
-  zip.file('char.png', tinyPng(overrides.pngWidth ?? 112, overrides.pngHeight ?? 96));
+  zip.file('char.png', tinyPng(overrides.pngWidth ?? 128, overrides.pngHeight ?? 96));
   return zip.generateAsync({ type: 'nodebuffer' });
 }
 

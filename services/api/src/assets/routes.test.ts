@@ -227,7 +227,7 @@ describe('GET /api/v1/assets/:assetId/frames', () => {
     expect(body.poses[0]?.frames[0]).toMatch(/^data:image\/png;base64,/);
   });
 
-  it('gives a character asset a walking pose per direction, with a mirrored left, plus typing/reading poses', async () => {
+  it('gives a character asset a walking pose per direction, with a mirrored left, plus typing/reading/seated poses', async () => {
     await publishCharacter('FRAMES_CHARACTER');
     const response = await app.inject({ method: 'GET', url: '/api/v1/assets/FRAMES_CHARACTER/frames' });
     expect(response.statusCode).toBe(200);
@@ -245,6 +245,10 @@ describe('GET /api/v1/assets/:assetId/frames', () => {
       'reading-up',
       'reading-right',
       'reading-left',
+      'seated-down',
+      'seated-up',
+      'seated-right',
+      'seated-left',
     ]);
     expect(body.poses.find((p) => p.key === 'left')?.mirror).toBe(true);
   });

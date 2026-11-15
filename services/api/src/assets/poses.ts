@@ -22,7 +22,7 @@
  */
 
 import type * as schema from '../db/schema.js';
-import type { CharacterFrames } from './decodeCharacter.js';
+import { type CharacterFrames, currentCharacterFrames } from './decodeCharacter.js';
 import type { PetFrames } from './decodePet.js';
 import type { FlattenedAsset } from './manifest.js';
 import { encodeSpritePng } from './spritePng.js';
@@ -76,7 +76,7 @@ function furniturePoses(manifest: FlattenedAsset[], sprites: Record<string, stri
   return poses;
 }
 
-/** How many leading frames of a 7-frame character row (or a 3-frame pet row) count as its walk cycle. */
+/** How many leading frames of an 8-frame character row (or a 3-frame pet row) count as its walk cycle. */
 const WALK_FRAME_COUNT = 3;
 
 /**
@@ -88,8 +88,8 @@ const WALK_FRAME_COUNT = 3;
  *
  * `select` picks which frames of a direction's raw array make up this
  * animation — defaults to the leading walk-cycle slice everyone gets, but
- * `characterPoses` also calls this with a different slice for the typing and
- * reading animations (same down/up/right/left shape, different frames).
+ * `characterPoses` also calls this with a different slice for the typing,
+ * reading and seated animations (same down/up/right/left shape, different frames).
  * `keyPrefix`/`labelPrefix` namespace a second call against the same
  * direction set so its pose keys/labels don't collide with the walk pass.
  */
@@ -125,32 +125,34 @@ function facingPoses(
 }
 
 /**
- * Raw frame indices for a character's typing and reading animations — the
- * same two pairs vendor's own `getCharacterSprites()`
- * (`webview-ui/src/office/sprites/spriteData.ts`) slices from the identical
- * 7-frame-per-direction row `facingPoses`'s walk slice reads frames [0-2]
- * from (frame order: walk1, walk2, walk3, type1, type2, read1, read2).
- * Copied verbatim rather than re-derived so this can never silently diverge
- * from what the real product renders for the same sprite sheet.
+ * Raw frame indices for a character's typing, reading and seated animations
+ * — the same columns vendor's own `SHEET_FRAMES`
+ * (`core/src/assets/seatedFrame.ts`) names in the identical
+ * 8-frame-per-direction row `facingPoses`'s walk slice reads frames [0-2]
+ * from (frame order: walk1, walk2, walk3, type1, type2, read1, read2,
+ * seated). Copied verbatim rather than re-derived so this can never silently
+ * diverge from what the real product renders for the same sprite sheet.
  */
 const CHARACTER_TYPING_FRAMES = [3, 4] as const;
 const CHARACTER_READING_FRAMES = [5, 6] as const;
+const CHARACTER_SEATED_FRAMES = [7] as const;
 
 function pickFrames(indices: readonly number[]): (rows: string[][][]) => string[][][] {
   return (rows) => indices.map((i) => rows[i]).filter((frame): frame is string[][] => Boolean(frame));
 }
 
 /**
- * A character's poses: the walk cycle every kind gets, plus the two
- * additional real animations vendor's own renderer drives from this exact
- * sprite sheet (typing = seated-at-desk, reading = the tool-reading variant,
- * `isReadingTool()` in `characters.ts` picks between them) — both previously
- * decoded and stored (`decodeCharacter.ts` extracts all 7 frames per
- * direction) but never surfaced as poses until now.
+ * A character's poses: the walk cycle every kind gets, plus the additional
+ * real animations vendor's own renderer drives from this exact sprite sheet
+ * (typing = seated-at-desk, reading = the tool-reading variant,
+ * `isReadingTool()` in `characters.ts` picks between them, and seated = an
+ * idle agent resting in its chair). Rows stored before the seated frame
+ * existed get it derived (`currentCharacterFrames`).
  */
 function characterPoses(id: string, sprites: Record<string, CharacterFrames>): AssetPose[] {
-  const frames = sprites[id];
-  if (!frames) return [];
+  const stored = sprites[id];
+  if (!stored) return [];
+  const frames = currentCharacterFrames(stored);
   return [
     ...facingPoses(frames.down, frames.up, frames.right),
     ...facingPoses(frames.down, frames.up, frames.right, {
@@ -162,6 +164,11 @@ function characterPoses(id: string, sprites: Record<string, CharacterFrames>): A
       keyPrefix: 'reading',
       labelPrefix: 'Reading',
       select: pickFrames(CHARACTER_READING_FRAMES),
+    }),
+    ...facingPoses(frames.down, frames.up, frames.right, {
+      keyPrefix: 'seated',
+      labelPrefix: 'Seated',
+      select: pickFrames(CHARACTER_SEATED_FRAMES),
     }),
   ];
 }

@@ -7,7 +7,6 @@ import type { Plugin, ResolvedConfig } from 'vite';
 import { buildFurnitureCatalog } from '../../../vendor/pixel-agents/core/src/assets/build.ts';
 import {
   decodeAllCarpets,
-  decodeAllCharacters,
   decodeAllFloors,
   decodeAllFurniture,
   decodeAllWalls,
@@ -17,6 +16,7 @@ import type {
   PetManifest,
   PetSpriteFrames,
 } from '../../../vendor/pixel-agents/core/src/assets/types.ts';
+import { composeDefaultCast } from './defaultCast.ts';
 
 const ASSET_FILENAMES = [
   'characters.json',
@@ -66,7 +66,7 @@ function generateAssets(assetsDir: string, upstreamRoot: string): GeneratedAsset
   const catalog = buildFurnitureCatalog(assetsDir);
   const pets = loadPets(assetsDir);
   return {
-    'characters.json': JSON.stringify(decodeAllCharacters(assetsDir)),
+    'characters.json': JSON.stringify(composeDefaultCast(upstreamRoot)),
     'floors.json': JSON.stringify(decodeAllFloors(assetsDir)),
     'walls.json': JSON.stringify(decodeAllWalls(assetsDir)),
     'carpets.json': JSON.stringify(decodeAllCarpets(assetsDir)),
