@@ -11,7 +11,7 @@ The wardrobe, the profile format, the randomizer and the renderer are Pixel Agen
 
 Works in Node 22+ and in browsers. No canvas, no native code, one small dependency ([fflate](https://github.com/101arrowz/fflate)).
 
-In this repository it draws the seeds in the web app's character designer (`/assets/design`, see [docs/custom-assets.md](../../docs/custom-assets.md#seeds-a-character-from-any-text-like-an-identicon)). Its `pixatar` command, with the [Python client](python/README.md), is how a project outside this repo makes the same avatars. The package is private for now, but kept ready to publish: see [PUBLISHING.md](PUBLISHING.md).
+In this repository it draws the seeds in the web app's character designer (`/assets/design`, see [docs/custom-assets.md](../../docs/custom-assets.md#seeds-a-character-from-any-text-like-an-identicon)), and the API's avatar route (`GET /api/v1/avatars/{seed}.png`, seed codes only, see [services/api/README.md](../../services/api/README.md#avatars)), which also draws the default avatar of every author without a picture. Its `pixatar` command, with the [Python client](python/README.md), is how a project outside this repo makes the same avatars. The package is private for now, but kept ready to publish: see [PUBLISHING.md](PUBLISHING.md).
 
 It began as a port of the standalone pixatar project (nntin-bot/pixatar at `06c29aa`). It is pixel-index's own code now and depends on nothing from that repository.
 
