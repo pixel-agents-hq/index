@@ -1,7 +1,7 @@
 /** DB rows -> the public JSON shape, mirroring `layouts/serialize.ts`'s pattern. */
 
 import type * as schema from '../db/schema.js';
-import type { PublicAuthor } from '../layouts/serialize.js';
+import { authorAvatarSeed, type PublicAuthor } from '../layouts/serialize.js';
 
 export interface PublicCustomAssetSummary {
   assetId: string;
@@ -38,6 +38,7 @@ export function assetAuthor(author: schema.User | null): PublicAuthor {
     username,
     displayName: author?.guildNickname ?? author?.globalName ?? username,
     avatarUrl: author?.avatarUrl ?? null,
+    avatarSeed: authorAvatarSeed(author),
   };
 }
 

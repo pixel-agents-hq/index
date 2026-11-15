@@ -8,6 +8,7 @@
 
 import { eq } from 'drizzle-orm';
 
+import { newUserIdentity } from '../avatars/defaults.js';
 import type { AnyDatabase } from '../db/client.js';
 import { one } from '../db/rows.js';
 import * as schema from '../db/schema.js';
@@ -44,6 +45,7 @@ export async function upsertDiscordUser(
     await db
       .insert(schema.users)
       .values({
+        ...newUserIdentity(),
         discordId: discordUser.id,
         username: discordUser.username,
         globalName: discordUser.globalName ?? null,
@@ -73,7 +75,7 @@ export async function resolveOrCreateGhostUser(db: AnyDatabase, discordId: strin
   return one(
     await db
       .insert(schema.users)
-      .values({ discordId, username: `discord:${discordId}` })
+      .values({ ...newUserIdentity(), discordId, username: `discord:${discordId}` })
       .returning(),
   );
 }

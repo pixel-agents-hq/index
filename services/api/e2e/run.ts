@@ -159,6 +159,38 @@ async function main() {
 
   let slug = '';
 
+  await step('the built image draws avatars from seed codes, and every author has a stored default (#133)', async () => {
+    // The entrypoint's backfill ran: even the system user, inserted by a
+    // migration before users.avatar_seed existed, has been dealt one.
+    // (Users this script INSERTs by hand after boot are not, and need not be.)
+    const { rows: system } = await db.query<{ avatar_seed: string | null }>(
+      'SELECT avatar_seed FROM users WHERE is_system',
+    );
+    assert(system.length > 0 && system.every((row) => row.avatar_seed?.startsWith('px.')), 'boot backfill did not run');
+
+    const list = await json<{ layouts: { author: { avatarUrl: string | null; avatarSeed: string | null } }[] }>(
+      await api('/api/v1/layouts?limit=1'),
+    );
+    const seed = list.layouts[0]?.author.avatarSeed;
+    assert(typeof seed === 'string' && seed.startsWith('px.'), 'a seed layout author has no avatarSeed');
+
+    const avatar = await api(`/api/v1/avatars/${seed}.png`);
+    assert.equal(avatar.status, 200);
+    assert.equal(avatar.headers.get('content-type'), 'image/png');
+    const bytes = Buffer.from(await avatar.arrayBuffer());
+    assert.deepEqual([...bytes.subarray(0, 8)], [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    // 160×160 by default: the IHDR width/height.
+    assert.equal(bytes.readUInt32BE(16), 160);
+    const etag = avatar.headers.get('etag');
+    assert(etag, 'no ETag on an avatar');
+    const again = await api(`/api/v1/avatars/${seed}.png`, { headers: { 'if-none-match': etag } });
+    assert.equal(again.status, 304);
+
+    const text = await api('/api/v1/avatars/someone%40example.com.png');
+    assert.equal(text.status, 400);
+    assert.equal((await json<{ error: string }>(text)).error, 'invalid_seed');
+  });
+
   await step('owner submits a layout and the renderer produces a real preview', async () => {
     const res = await api('/api/v1/layouts?title=E2E+Office', {
       method: 'POST',

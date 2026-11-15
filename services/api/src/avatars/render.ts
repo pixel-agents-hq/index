@@ -141,7 +141,7 @@ const AVATAR_PATH_RE = /^(\/api\/v1\/avatars\/)([^?]*)(.*)$/;
 export function redactAvatarUrl(url: string): string {
   const match = AVATAR_PATH_RE.exec(url);
   if (!match) return url;
-  const [, prefix, segment = '', rest] = match;
+  const [, prefix = '', segment = '', rest = ''] = match;
   const seed = segment.endsWith('.png') ? segment.slice(0, -'.png'.length) : segment;
   if (seed.length <= MAX_SEED_CODE_LENGTH && SEED_CODE_RE.test(seed)) return url;
   return `${prefix}[redacted]${rest}`;

@@ -5,6 +5,7 @@
 
 import { eq } from 'drizzle-orm';
 
+import { newUserIdentity } from '../avatars/defaults.js';
 import type { AnyDatabase } from '../db/client.js';
 import { SYSTEM_USER_ID } from '../db/constants.js';
 import { one } from '../db/rows.js';
@@ -22,6 +23,7 @@ export async function insertUser(
     await db
       .insert(schema.users)
       .values({
+        ...newUserIdentity(),
         discordId: `discord-${counter}`,
         username: `user-${counter}`,
         role: 'user',

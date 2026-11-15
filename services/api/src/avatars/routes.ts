@@ -81,8 +81,8 @@ export function registerAvatarRoutes(app: FastifyInstance, { config }: AvatarRou
       const { seed } = request.params;
       const { scale, background } = request.query;
       const avatar = renderAvatarPng(seed, {
-        // ajv's `useDefaults` (server.ts AJV_OPTIONS) fills it in.
-        scale: scale ?? DEFAULT_AVATAR_SCALE,
+        // ajv's `useDefaults` (server.ts AJV_OPTIONS) fills in the default.
+        scale,
         ...(background ? { background } : {}),
       });
 

@@ -144,6 +144,7 @@ describe('POST /api/v1/layouts — the happy path', () => {
       username: 'happy-path',
       displayName: 'happy-path',
       avatarUrl: null,
+      avatarSeed: user.avatarSeed,
     });
     expect(body.tags.sort()).toEqual(['cosy', 'small']);
     expect(response.headers.location).toBe(`/api/v1/layouts/${body.slug}`);

@@ -6,6 +6,7 @@ import type { AnyDatabase } from '../db/client.js';
 import * as schema from '../db/schema.js';
 import { ApiError } from '../errors.js';
 import type { RequestSchemas } from '../http.js';
+import { authorAvatarSeed } from '../layouts/serialize.js';
 
 export interface AuthorRoutesDeps {
   db: AnyDatabase;
@@ -45,11 +46,13 @@ export function registerAuthorRoutes(app: FastifyInstance, { db }: AuthorRoutesD
       const { id } = request.params;
       const [row] = await db
         .select({
+          id: schema.users.id,
           discordId: schema.users.discordId,
           username: schema.users.username,
           globalName: schema.users.globalName,
           guildNickname: schema.users.guildNickname,
           avatarUrl: schema.users.avatarUrl,
+          avatarSeed: schema.users.avatarSeed,
           publicLayoutCount: sql<number>`count(${schema.layouts.id})::int`,
         })
         .from(schema.users)
@@ -71,6 +74,7 @@ export function registerAuthorRoutes(app: FastifyInstance, { db }: AuthorRoutesD
           username: row.username,
           displayName: row.guildNickname ?? row.globalName ?? row.username,
           avatarUrl: row.avatarUrl,
+          avatarSeed: authorAvatarSeed(row),
         },
         publicLayoutCount: row.publicLayoutCount,
       };

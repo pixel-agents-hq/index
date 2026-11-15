@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { ApiError, getLayoutJson, listLayouts } from './client';
+import { ApiError, authorAvatarSrc, getLayoutJson, listLayouts } from './client';
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -163,5 +163,20 @@ describe('getLayoutJson', () => {
       expect.stringMatching(/\/api\/v1\/layouts\/office%20%2F%20one\/download$/),
       expect.any(Object),
     );
+  });
+});
+
+describe('authorAvatarSrc (#133)', () => {
+  it('prefers the avatar an author has', () => {
+    expect(authorAvatarSrc({ avatarUrl: 'https://cdn.example/a.png', avatarSeed: 'px.AAAA' })).toBe('https://cdn.example/a.png');
+  });
+
+  it('falls back to the API-drawn default from the stored seed code', () => {
+    expect(authorAvatarSrc({ avatarUrl: null, avatarSeed: 'px.AB-_c' })).toMatch(/\/api\/v1\/avatars\/px\.AB-_c\.png$/);
+  });
+
+  it('is null with neither, as from a legacy credit or an API older than the seed', () => {
+    expect(authorAvatarSrc({ avatarUrl: null, avatarSeed: null })).toBeNull();
+    expect(authorAvatarSrc({ avatarUrl: null })).toBeNull();
   });
 });

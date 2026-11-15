@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
-import { ApiError, getAuthor, listAssets, listLayouts, listSoundtracks } from '../api/client';
+import { ApiError, authorAvatarSrc, getAuthor, listAssets, listLayouts, listSoundtracks } from '../api/client';
 import type { AssetSummary, LayoutSummary, PublicAuthorResponse, Soundtrack } from '../api/types';
 import { AssetCard } from '../components/AssetCard';
 import { ErrorNotice } from '../components/ErrorNotice';
@@ -73,12 +73,19 @@ export function AuthorPage() {
 
   if (error) return <ErrorNotice error={error} />;
   if (!profile || !layouts) return <p className="text-muted">Loading author…</p>;
+  const avatarSrc = authorAvatarSrc(profile.author);
 
   return (
     <div>
       <header className="mb-6 flex items-center gap-4">
-        {profile.author.avatarUrl && (
-          <img src={profile.author.avatarUrl} alt="" className="h-16 w-16 rounded-full" />
+        {avatarSrc && (
+          <img
+            src={avatarSrc}
+            alt=""
+            // A default avatar is pixel art, 20 pixels drawn 8 times over:
+            // keep its pixels square when the browser scales it to 64px.
+            className={`h-16 w-16 rounded-full${profile.author.avatarUrl ? '' : ' [image-rendering:pixelated]'}`}
+          />
         )}
         <div>
           <h1 className="font-display text-2xl text-ink">{profile.author.displayName}</h1>
