@@ -2,6 +2,7 @@
 
 import type * as schema from '../db/schema.js';
 import type { PublicAuthor } from '../layouts/serialize.js';
+import type { CustomAssetSummaryRow } from './query.js';
 
 export interface PublicCustomAssetSummary {
   assetId: string;
@@ -45,7 +46,7 @@ function files(assetId: string): PublicCustomAssetSummary['files'] {
   return { sprite: `/api/v1/assets/${assetId}/sprite.png` };
 }
 
-export function toSummary(asset: schema.CustomAsset, author: schema.User | null): PublicCustomAssetSummary {
+export function toSummary(asset: CustomAssetSummaryRow, author: schema.User | null): PublicCustomAssetSummary {
   return {
     assetId: asset.assetId,
     assetKind: asset.assetKind,

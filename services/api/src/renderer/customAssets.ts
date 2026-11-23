@@ -22,7 +22,7 @@
 import { type CharacterFrames, currentCharacterFrames } from '../assets/decodeCharacter.js';
 import type { PetFrames } from '../assets/decodePet.js';
 import type { FlattenedAsset } from '../assets/manifest.js';
-import { allCustomAssetCatalog, customAssetsOfKind } from '../assets/query.js';
+import { customAssetsOfKind, customFurnitureForTypes } from '../assets/query.js';
 import { encodeSpritePng } from '../assets/spritePng.js';
 import type { AnyDatabase } from '../db/client.js';
 
@@ -54,21 +54,17 @@ function furnitureTypesUsed(layout: unknown): Set<string> {
  * PNG (`encodeSpritePng` — the reverse of the decode `assets/decode.ts` did
  * at upload time) and base64-encoded for the JSON request body.
  *
- * Reads every published custom furniture asset (`allCustomAssetCatalog`)
- * rather than a targeted lookup by id — there is no index over the manifest
- * variants' individual ids today, and at the scale a community furniture
- * catalog actually reaches, filtering the whole (small) set in memory is
- * simpler than adding one speculatively.
+ * Postgres selects only the used variants and their pixels. Loading the
+ * whole catalog here multiplied its decoded sprite data by every concurrent
+ * thumbnail request and exhausted the API heap on the gallery page.
  */
 async function furnitureForLayout(db: AnyDatabase, layout: unknown): Promise<RenderCustomAsset[]> {
   const used = furnitureTypesUsed(layout);
   if (used.size === 0) return [];
 
-  const { catalog, sprites } = await allCustomAssetCatalog(db);
+  const variants = await customFurnitureForTypes(db, [...used]);
   const result: RenderCustomAsset[] = [];
-  for (const entry of catalog as FlattenedAsset[]) {
-    if (!used.has(entry.id)) continue;
-    const sprite = sprites[entry.id];
+  for (const { catalogEntry: entry, sprite } of variants) {
     if (!sprite) continue;
     result.push({
       kind: 'furniture',
