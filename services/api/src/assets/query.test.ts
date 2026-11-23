@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { PIXEL_AGENTS_SYSTEM_USER_ID } from '../db/constants.js';
 import * as schema from '../db/schema.js';
 import { createTestDatabase, type Harness } from '../db/test-support/harness.js';
-import { listCustomAssets } from './query.js';
+import { customFurnitureForTypes, listCustomAssets } from './query.js';
 
 let harness: Harness;
 afterEach(async () => {
@@ -47,6 +47,18 @@ function furnitureRow(
 }
 
 describe('listCustomAssets pagination', () => {
+  it('returns summary fields without decoded sprites, manifests or upload ZIPs', async () => {
+    harness = await createTestDatabase();
+    await harness.db.insert(schema.customAssets).values(furnitureRow('SUMMARY_ONLY', 'custom'));
+
+    const result = await listCustomAssets(harness.db, { filters: {}, limit: 24 });
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0]).toMatchObject({ assetId: 'SUMMARY_ONLY', name: 'SUMMARY_ONLY' });
+    expect(result.rows[0]).not.toHaveProperty('sprites');
+    expect(result.rows[0]).not.toHaveProperty('manifest');
+    expect(result.rows[0]).not.toHaveProperty('rawZip');
+  });
+
   // Regression test for the real staging bug: builtinSync.ts bulk-INSERTs
   // every built-in row in one statement, so they all share a single
   // Postgres now() call at genuine microsecond precision. The cursor used
@@ -92,6 +104,32 @@ describe('listCustomAssets pagination', () => {
     const expected = [...builtinRows.map((row) => row.assetId), 'CUSTOM_A', 'CUSTOM_B'].sort();
     expect([...new Set(seen)].sort()).toEqual(expected);
     expect(seen.length).toBe(expected.length);
+  });
+});
+
+describe('customFurnitureForTypes', () => {
+  it('selects a referenced variant without loading its sibling frames or unrelated assets', async () => {
+    harness = await createTestDatabase();
+    const root = furnitureRow('ANIMATED_CHAIR', 'custom');
+    const entry = (root.manifest as Record<string, unknown>[])[0];
+    await harness.db.insert(schema.customAssets).values([
+      {
+        ...root,
+        manifest: [{ ...entry, id: 'CHAIR_FRAME_0' }, { ...entry, id: 'CHAIR_FRAME_1' }],
+        sprites: { CHAIR_FRAME_0: [['#ff00ff']], CHAIR_FRAME_1: [['#00ff00']] },
+      },
+      furnitureRow('UNRELATED', 'custom'),
+      furnitureRow('BUILTIN', 'builtin', { sourceCommit: '0'.repeat(40) }),
+      furnitureRow('DELETED', 'custom', { deletedAt: new Date() }),
+    ]);
+
+    const variants = await customFurnitureForTypes(harness.db, [
+      'CHAIR_FRAME_1', 'BUILTIN', 'DELETED', 'UNKNOWN',
+    ]);
+    expect(variants).toEqual([
+      { catalogEntry: { ...entry, id: 'CHAIR_FRAME_1' }, sprite: [['#00ff00']] },
+    ]);
+    expect(await customFurnitureForTypes(harness.db, [])).toEqual([]);
   });
 });
 

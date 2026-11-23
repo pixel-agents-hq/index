@@ -5,7 +5,25 @@ import { and, arrayContains, arrayOverlaps, desc, eq, inArray, isNull, not, sql 
 import type { AnyDatabase } from '../db/client.js';
 import * as schema from '../db/schema.js';
 import { type Cursor, decodeCursor, encodeCursor, timestampMicros } from '../layouts/cursor.js';
+import type { FlattenedAsset } from './manifest.js';
 import { INTERACTABLE_TAG, PROFILE_TAG } from './tags.js';
+
+// Listing must never load decoded pixels or upload ZIPs: a single animated
+// asset can hold tens of megabytes that its summary does not use.
+const summaryColumns = {
+  id: schema.customAssets.id,
+  assetId: schema.customAssets.assetId,
+  assetKind: schema.customAssets.assetKind,
+  name: schema.customAssets.name,
+  category: schema.customAssets.category,
+  source: schema.customAssets.source,
+  authorUserId: schema.customAssets.authorUserId,
+  tags: schema.customAssets.tags,
+  createdAt: schema.customAssets.createdAt,
+  updatedAt: schema.customAssets.updatedAt,
+};
+
+export type CustomAssetSummaryRow = Pick<schema.CustomAsset, keyof typeof summaryColumns>;
 
 export interface ListCustomAssetsFilters {
   assetKind?: schema.CustomAsset['assetKind'];
@@ -34,7 +52,7 @@ export interface ListCustomAssetsOptions {
 }
 
 export interface ListCustomAssetsResult {
-  rows: schema.CustomAsset[];
+  rows: CustomAssetSummaryRow[];
   total: number;
   nextCursor: string | null;
 }
@@ -105,7 +123,7 @@ export async function listCustomAssets(
   const whereClause = cursor ? and(...conditions, cursorCondition(cursor)) : and(...conditions);
 
   const page = await db
-    .select()
+    .select(summaryColumns)
     .from(schema.customAssets)
     .where(whereClause)
     .orderBy(desc(schema.customAssets.createdAt), desc(schema.customAssets.id))
@@ -198,7 +216,7 @@ export async function allCustomAssetCatalog(
   db: AnyDatabase,
 ): Promise<{ catalog: unknown[]; sprites: Record<string, string[][]> }> {
   const rows = await db
-    .select()
+    .select({ manifest: schema.customAssets.manifest, sprites: schema.customAssets.sprites })
     .from(schema.customAssets)
     .where(
       and(
@@ -214,6 +232,36 @@ export async function allCustomAssetCatalog(
     Object.assign(sprites, row.sprites as Record<string, string[][]>);
   }
   return { catalog, sprites };
+}
+
+/**
+ * Only the furniture variants a layout places, including variants whose id
+ * differs from their owning asset's root id. Filter and extract in Postgres
+ * so unrelated assets and animation frames never enter the API's heap.
+ */
+export async function customFurnitureForTypes(
+  db: AnyDatabase,
+  types: string[],
+): Promise<{ catalogEntry: FlattenedAsset; sprite: string[][] | null }[]> {
+  if (types.length === 0) return [];
+  return db
+    .select({
+      catalogEntry: sql<FlattenedAsset>`variant.entry`,
+      sprite: sql<string[][] | null>`${schema.customAssets.sprites} -> (variant.entry ->> 'id')`,
+    })
+    .from(schema.customAssets)
+    .innerJoin(
+      sql`lateral jsonb_array_elements(${schema.customAssets.manifest}) as variant(entry)`,
+      sql`true`,
+    )
+    .where(
+      and(
+        eq(schema.customAssets.assetKind, 'furniture'),
+        eq(schema.customAssets.source, 'custom'),
+        isNull(schema.customAssets.deletedAt),
+        inArray(sql<string>`variant.entry ->> 'id'`, types),
+      ),
+    );
 }
 
 /**
